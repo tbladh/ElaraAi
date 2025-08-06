@@ -45,19 +45,73 @@ When working with this codebase:
 # Solution Information for AI Agents
 
 ## Solution Structure
-TBD
+The ErnestAi solution follows a modular architecture with the following structure:
+
+1. **ErnestAi.Modular.sln** - The main solution file for the modular architecture
+2. **ErnestAi.Core** - Core interfaces and shared components used across all projects
+3. **ErnestAi.Audio** - Audio processing and management
+4. **ErnestAi.Speech** - Speech-to-text and text-to-speech services
+5. **ErnestAi.Intelligence** - Language model integration and intelligence services
+6. **ErnestAi.Tools** - Tool execution and utility services
+7. **ErnestAi.Plugins** - Plugin system for extensibility
+8. **ErnestAi.Configuration** - Configuration management
+9. **ErnestAi.Host** - Main application host and entry point
+
+The original ErnestAi project is maintained separately as a reference implementation.
 
 ## Project INFO.ai Files
-- This file: `./INFO.ai`
-- ...
+- This file: `./INFO.ai` - Root project information
+- `./ErnestAi.Core/INFO.ai` - Core interfaces and shared components
+- `./ErnestAi.Audio/INFO.ai` - Audio processing components
+- `./ErnestAi.Speech/INFO.ai` - Speech services
+- `./ErnestAi.Intelligence/INFO.ai` - Intelligence services
+- `./ErnestAi.Tools/INFO.ai` - Tool execution services
+- `./ErnestAi.Plugins/INFO.ai` - Plugin system
+- `./ErnestAi.Configuration/INFO.ai` - Configuration management
+- `./ErnestAi.Host/INFO.ai` - Application host
 
 ## Project Dependencies
+- All projects reference ErnestAi.Core for shared interfaces
+- ErnestAi.Host references all other projects to compose the full application
 - Always use standard `ProjectReference` elements for project dependencies rather than custom MSBuild targets
 - A ProjectReference automatically:
   - Ensures the referenced project is built first
   - Establishes proper dependency tracking
   - Handles output file copying through standard MSBuild behavior
 - This approach maintains simplicity and follows .NET best practices
+
+## Core Interfaces
+The ErnestAi.Core project defines the following key interfaces:
+
+1. **Audio Processing**
+   - `IAudioProcessor` - Interface for audio input/output processing
+
+2. **Wake Word Detection**
+   - `IWakeWordDetector` - Interface for wake word detection services
+
+3. **Speech Services**
+   - `ISpeechToTextService` - Interface for speech-to-text services
+   - `ITextToSpeechService` - Interface for text-to-speech services
+
+4. **Intelligence Services**
+   - `ILanguageModelService` - Interface for language model integration
+
+5. **Tool Execution**
+   - `IToolExecutor` - Interface for executing tools and commands
+
+6. **Configuration**
+   - `IAudioConfiguration` - Audio settings configuration
+   - `IModelConfiguration` - AI model configuration
+   - `IPersonalityConfiguration` - Assistant personality configuration
+
+7. **Storage**
+   - `IConversationHistory` - Conversation history storage
+   - `IUserPreferences` - User preferences storage
+   - `IModelCache` - AI model caching
+
+8. **Plugin System**
+   - `IPluginManager` - Plugin management
+   - `IPlugin` - Plugin interface
 
 ## Build and Run
 TBD

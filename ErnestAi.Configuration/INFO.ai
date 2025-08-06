@@ -1,0 +1,57 @@
+# ErnestAi.Configuration - Configuration Management
+
+## Purpose
+The ErnestAi.Configuration project handles all configuration management for the ErnestAi system. It provides implementations for storing, retrieving, and validating configuration settings across all components of the system, ensuring consistent and secure configuration handling.
+
+## Key Components
+
+### Configuration Providers
+- Implements the configuration interfaces from ErnestAi.Core
+- Provides access to configuration settings from various sources
+- Handles configuration validation and defaults
+- Supports configuration change notifications
+
+### Audio Configuration
+- Implements the `IAudioConfiguration` interface from ErnestAi.Core
+- Manages audio device settings
+- Configures recording and playback parameters
+- Handles voice activity detection settings
+
+### Model Configuration
+- Implements the `IModelConfiguration` interface from ErnestAi.Core
+- Manages AI model paths and settings
+- Configures language model parameters
+- Handles wake word and speech recognition settings
+
+### Personality Configuration
+- Implements the `IPersonalityConfiguration` interface from ErnestAi.Core
+- Manages assistant personality settings
+- Configures greeting and response styles
+- Handles communication preferences
+
+### Configuration Storage
+- Persists configuration to disk
+- Handles configuration encryption for sensitive settings
+- Supports configuration backup and restore
+- Manages configuration versioning
+
+## Dependencies
+- ErnestAi.Core - For core interfaces
+- Microsoft.Extensions.Configuration - For configuration framework
+
+## Implementation Notes
+- Uses standard .NET configuration patterns
+- Implements proper validation for all configuration settings
+- Supports hot-reloading of configuration when possible
+- Handles secure storage of sensitive configuration
+
+## Development Guidelines
+- Keep configuration code isolated from business logic
+- Implement proper validation for all configuration settings
+- Use secure storage for sensitive configuration (API keys, credentials)
+- Provide clear defaults for all configuration options
+- Document configuration options thoroughly
+
+## Related Files
+- Root INFO.ai: `../INFO.ai`
+- Core interfaces: `../ErnestAi.Core/INFO.ai`

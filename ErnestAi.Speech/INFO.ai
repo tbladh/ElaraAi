@@ -1,0 +1,54 @@
+# ErnestAi.Speech - Speech Processing Components
+
+## Purpose
+The ErnestAi.Speech project handles speech-to-text (STT) and text-to-speech (TTS) functionality for the ErnestAi system. It provides implementations for converting spoken language to text and synthesizing natural-sounding speech from text.
+
+## Key Components
+
+### Speech-to-Text Service
+- Implements the `ISpeechToTextService` interface from ErnestAi.Core
+- Provides transcription of audio to text
+- Supports both file-based and streaming transcription
+- Handles different languages and accents
+- Provides confidence scores and timing information
+
+### Text-to-Speech Service
+- Implements the `ITextToSpeechService` interface from ErnestAi.Core
+- Converts text to natural-sounding speech
+- Supports multiple voices and languages
+- Provides control over speech rate, pitch, and other parameters
+- Outputs to audio stream, file, or directly to audio device
+
+### Model Management
+- Handles downloading and caching of speech models
+- Manages model updates and versioning
+- Provides model selection based on language and quality requirements
+
+### Speech Enhancement
+- Noise reduction and audio cleanup
+- Speaker normalization
+- Improves speech recognition accuracy in noisy environments
+
+## Dependencies
+- ErnestAi.Core - For core interfaces
+- ErnestAi.Audio - For audio processing (optional, can be injected)
+- Whisper.net - For local speech recognition (implementation detail)
+- System.Speech - For text-to-speech synthesis (implementation detail)
+
+## Implementation Notes
+- Uses Whisper models for high-quality speech recognition
+- Implements streaming transcription for real-time applications
+- Supports both local and potentially cloud-based speech services
+- Handles proper resource management for speech models
+
+## Development Guidelines
+- Keep speech processing isolated from business logic
+- Consider privacy implications when implementing speech services
+- Implement proper error handling for speech recognition failures
+- Support fallback mechanisms when primary speech services are unavailable
+- Consider accessibility needs in speech synthesis
+
+## Related Files
+- Root INFO.ai: `../INFO.ai`
+- Core interfaces: `../ErnestAi.Core/INFO.ai`
+- Audio processing: `../ErnestAi.Audio/INFO.ai`
