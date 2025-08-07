@@ -8,9 +8,31 @@ using System.Threading;
 using System.Threading.Tasks;
 using Whisper.net;
 using System.Linq;
+using ErnestAi.Configuration;
 
 namespace ErnestAi.Speech
 {
+    /// <summary>
+    /// Event arguments for transcription events
+    /// </summary>
+    public class TranscriptionEventArgs : EventArgs
+    {
+        /// <summary>
+        /// The transcribed text
+        /// </summary>
+        public string Text { get; set; }
+        
+        /// <summary>
+        /// The start time of the transcription in seconds
+        /// </summary>
+        public double StartTime { get; set; }
+        
+        /// <summary>
+        /// The end time of the transcription in seconds
+        /// </summary>
+        public double EndTime { get; set; }
+    }
+    
     /// <summary>
     /// Implementation of ISpeechToTextService using Whisper.net for speech recognition
     /// </summary>
@@ -21,17 +43,26 @@ namespace ErnestAi.Speech
         private WhisperProcessor _processor;
         private readonly SemaphoreSlim _initSemaphore = new SemaphoreSlim(1, 1);
         private bool _isInitialized;
+        private readonly SpeechToTextConfig _config;
+        
+        /// <summary>
+        /// Event fired when text is transcribed
+        /// </summary>
+        public event EventHandler<TranscriptionEventArgs> TextTranscribed;
 
         /// <summary>
         /// Creates a new instance of the SpeechToTextService
         /// </summary>
-        /// <param name="modelFileName">The filename of the Whisper model</param>
-        /// <param name="modelUrl">The URL to download the Whisper model from if not present</param>
+        /// <param name="modelFileName">The filename of the Whisper model to use</param>
+        /// <param name="modelUrl">URL to download the model from if it doesn't exist locally</param>
+        /// <param name="config">Configuration for the speech-to-text service</param>
         public SpeechToTextService(string modelFileName = "ggml-base.en.bin", 
-            string modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin")
+            string modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+            SpeechToTextConfig config = null)
         {
             _modelFileName = modelFileName;
             _modelUrl = modelUrl;
+            _config = config ?? new SpeechToTextConfig();
         }
 
         /// <summary>
@@ -115,13 +146,29 @@ namespace ErnestAi.Speech
                         if (cancellationToken.IsCancellationRequested)
                             yield break;
                             
-                        yield return new TranscriptionSegment
+                        var segment = new TranscriptionSegment
                         {
                             Text = whisperSegment.Text,
                             StartTime = whisperSegment.Start.TotalSeconds,
                             EndTime = whisperSegment.End.TotalSeconds,
                             Confidence = 1.0f // Whisper.net doesn't provide confidence scores
                         };
+                        
+                        // Report transcribed text to host if configured
+                        if (_config.OutputTranscriptionToConsole)
+                        {
+                            Console.WriteLine($"[Transcribed {segment.StartTime:F1}s-{segment.EndTime:F1}s]: {segment.Text}");
+                        }
+                        
+                        // Raise event for subscribers
+                        TextTranscribed?.Invoke(this, new TranscriptionEventArgs
+                        {
+                            Text = segment.Text,
+                            StartTime = segment.StartTime,
+                            EndTime = segment.EndTime
+                        });
+                        
+                        yield return segment;
                     }
                     
                     buffer.SetLength(0);
@@ -139,13 +186,29 @@ namespace ErnestAi.Speech
                     if (cancellationToken.IsCancellationRequested)
                         yield break;
                         
-                    segments.Add(new TranscriptionSegment
+                    var segment = new TranscriptionSegment
                     {
                         Text = whisperSegment.Text,
                         StartTime = whisperSegment.Start.TotalSeconds,
                         EndTime = whisperSegment.End.TotalSeconds,
                         Confidence = 1.0f
+                    };
+                    
+                    // Report transcribed text to host if configured
+                    if (_config.OutputTranscriptionToConsole)
+                    {
+                        Console.WriteLine($"[Transcribed {segment.StartTime:F1}s-{segment.EndTime:F1}s]: {segment.Text}");
+                    }
+                    
+                    // Raise event for subscribers
+                    TextTranscribed?.Invoke(this, new TranscriptionEventArgs
+                    {
+                        Text = segment.Text,
+                        StartTime = segment.StartTime,
+                        EndTime = segment.EndTime
                     });
+                    
+                    segments.Add(segment);
                 }
                 
                 foreach (var segment in segments)

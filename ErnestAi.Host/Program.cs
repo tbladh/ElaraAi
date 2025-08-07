@@ -1,9 +1,11 @@
 using ErnestAi.Audio;
+using ErnestAi.Configuration;
 using ErnestAi.Core.Interfaces;
 using ErnestAi.Intelligence;
 using ErnestAi.Speech;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,17 +18,29 @@ namespace ErnestAi.Host
             Console.WriteLine("ErnestAi - Local AI Home Assistant");
             Console.WriteLine("----------------------------------");
             
+            // Load configuration
+            Console.WriteLine("Loading configuration...");
+            var config = await AppConfig.LoadAsync();
+            
+            
+            // Display configuration information
+            Console.WriteLine($"Wake Word: {config.WakeWord.WakeWord}");
+            Console.WriteLine($"STT Model: {config.SpeechToText.ModelFileName}");
+            Console.WriteLine($"LLM Service URL: {config.LanguageModel.ServiceUrl}");
+            Console.WriteLine($"LLM Model: {config.LanguageModel.ModelName}");
+            Console.WriteLine($"STT Console Output: {(config.SpeechToText.OutputTranscriptionToConsole ? "Enabled" : "Disabled")}");
+            
             // Setup dependency injection
             var services = new ServiceCollection();
-            ConfigureServices(services);
+            ConfigureServices(services, config);
             
             var serviceProvider = services.BuildServiceProvider();
             
             // Initialize and start the application components
-            await RunErnestAiAsync(serviceProvider);
+            await RunErnestAiAsync(serviceProvider, config);
         }
         
-        private static async Task RunErnestAiAsync(ServiceProvider serviceProvider)
+        private static async Task RunErnestAiAsync(ServiceProvider serviceProvider, AppConfig config)
         {
             Console.WriteLine("Starting ErnestAi...");
             
@@ -36,6 +50,33 @@ namespace ErnestAi.Host
             var sttService = serviceProvider.GetRequiredService<ISpeechToTextService>();
             var llmService = serviceProvider.GetRequiredService<ILanguageModelService>();
             var ttsService = serviceProvider.GetRequiredService<ITextToSpeechService>();
+            
+            // Ensure wake word is set correctly from config
+            wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
+            
+            // Subscribe to transcription events
+            if (sttService is SpeechToTextService speechToTextService)
+            {
+                speechToTextService.TextTranscribed += (sender, e) =>
+                {
+                    // This event handler will be called whenever text is transcribed
+                    // You can use this to update a UI, log to a file, etc.
+                    
+                    // Example: Log to a file
+                    try
+                    {
+                        File.AppendAllText("transcription_log.txt", 
+                            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e.StartTime:F1}s-{e.EndTime:F1}s: {e.Text}\n");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Silently handle file access errors
+                        Console.WriteLine($"Error logging transcription: {ex.Message}");
+                    }
+                    
+                    // Example: You could send this to a UI, analytics service, etc.
+                };
+            }
             
             // Setup wake word detection handler
             var cts = new CancellationTokenSource();
@@ -88,22 +129,32 @@ namespace ErnestAi.Host
             cts.Cancel();
         }
         
-        private static void ConfigureServices(IServiceCollection services)
+        private static void ConfigureServices(IServiceCollection services, AppConfig config)
         {
+            // Register configuration
+            services.AddSingleton(config);
+            
             // Register core services with their implementations
             services.AddSingleton<IWakeWordDetector>(provider => 
-                new WakeWordDetector("ggml-tiny.en.bin", 
-                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin"));
+                new WakeWordDetector(
+                    config.WakeWord.ModelFileName, 
+                    config.WakeWord.ModelUrl,
+                    config.WakeWord));
                 
             services.AddSingleton<IAudioProcessor>(provider => 
-                new AudioProcessor(16000, 1));
+                new AudioProcessor(
+                    config.Audio.SampleRate, 
+                    config.Audio.Channels));
                 
             services.AddScoped<ISpeechToTextService>(provider => 
-                new SpeechToTextService("ggml-base.en.bin", 
-                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"));
+                new SpeechToTextService(
+                    config.SpeechToText.ModelFileName, 
+                    config.SpeechToText.ModelUrl,
+                    config.SpeechToText));
                 
             services.AddScoped<ILanguageModelService>(provider => 
-                new OllamaLanguageModelService("http://127.0.0.1:11434"));
+                new OllamaLanguageModelService(
+                    config.LanguageModel.ServiceUrl));
                 
             services.AddTransient<ITextToSpeechService>(provider => 
                 new TextToSpeechService());

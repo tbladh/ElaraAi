@@ -1,7 +1,9 @@
+using ErnestAi.Configuration;
 using ErnestAi.Core.Interfaces;
 using NAudio.Utils;
 using NAudio.Wave;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
@@ -32,7 +34,7 @@ namespace ErnestAi.Audio
         /// <summary>
         /// Gets or sets the wake word to listen for
         /// </summary>
-        public string WakeWord { get; set; } = "ernest";
+        public string WakeWord { get; set; }
 
         /// <summary>
         /// Gets or sets the confidence threshold for wake word detection
@@ -44,11 +46,22 @@ namespace ErnestAi.Audio
         /// </summary>
         /// <param name="modelFileName">The filename of the Whisper model</param>
         /// <param name="modelUrl">The URL to download the Whisper model from if not present</param>
+        /// <param name="config">Configuration for wake word detection</param>
         public WakeWordDetector(string modelFileName = "ggml-tiny.en.bin", 
-            string modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin")
+            string modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
+            WakeWordConfig config = null)
         {
             _modelFileName = modelFileName;
             _modelUrl = modelUrl;
+            
+            if (config != null)
+            {
+                WakeWord = config.WakeWord.ToLower();
+            }
+            else
+            {
+                Console.WriteLine("WakeWordDetector: No config provided, using default wake word");
+            }
         }
 
         /// <summary>
@@ -83,8 +96,6 @@ namespace ErnestAi.Audio
                 _waveIn.DataAvailable += WaveIn_DataAvailable;
                 _isListening = true;
                 _waveIn.StartRecording();
-
-                Console.WriteLine($"Listening for wake word: \"{WakeWord}\"...");
             }
             finally
             {
@@ -148,6 +159,7 @@ namespace ErnestAi.Audio
                 {
                     await foreach (var segment in _processor.ProcessAsync(wavStream))
                     {
+                        Debug.WriteLine($"Transcript segment: {segment.Text}");
                         transcript += segment.Text;
                     }
 

@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ErnestAi.Core\ErnestAi.Core.csproj" />
+    <ProjectReference Include="..\ErnestAi.Configuration\ErnestAi.Configuration.csproj" />
   </ItemGroup>
 
 </Project>
