@@ -63,20 +63,13 @@ namespace ErnestAi.Intelligence
             return SendGenerateAsync(prompt, system: null, stream: false, cancellationToken);
         }
 
-        private async Task EnsureModelSelectedAsync()
+        private Task EnsureModelSelectedAsync()
         {
-            if (!string.IsNullOrEmpty(CurrentModel)) return;
-            var models = await GetAvailableModelsAsync();
-            foreach (var model in models)
+            if (string.IsNullOrWhiteSpace(CurrentModel))
             {
-                CurrentModel = model;
-                break;
+                throw new InvalidOperationException("No model configured. Set LanguageModel:ModelName in appsettings.json.");
             }
-
-            if (string.IsNullOrEmpty(CurrentModel))
-            {
-                throw new InvalidOperationException("No models available in Ollama.");
-            }
+            return Task.CompletedTask;
         }
 
         private async Task<string> SendGenerateAsync(string prompt, string system, bool stream, CancellationToken cancellationToken)
@@ -105,21 +98,7 @@ namespace ErnestAi.Intelligence
             string prompt, 
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            // If no model is selected, try to select one
-            if (string.IsNullOrEmpty(CurrentModel))
-            {
-                var models = await GetAvailableModelsAsync();
-                foreach (var model in models)
-                {
-                    CurrentModel = model;
-                    break;
-                }
-
-                if (string.IsNullOrEmpty(CurrentModel))
-                {
-                    throw new InvalidOperationException("No models available in Ollama.");
-                }
-            }
+            await EnsureModelSelectedAsync();
 
             // Prepare the request
             var request = new OllamaGenerateRequest

@@ -6,6 +6,7 @@ using ErnestAi.Speech;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,6 +55,34 @@ namespace ErnestAi.Host
             
             // Ensure wake word is set correctly from config
             wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
+
+            // List available models and validate configured model before starting warmup or listeners
+            try
+            {
+                var models = await llmService.GetAvailableModelsAsync();
+                Console.WriteLine("[LLM] Available models:");
+                foreach (var m in models)
+                {
+                    Console.WriteLine($" - {m}");
+                }
+                Console.WriteLine($"[LLM] Configured model: {config.LanguageModel.ModelName}");
+
+                var exists = models.Any(m => string.Equals(m, config.LanguageModel.ModelName, StringComparison.OrdinalIgnoreCase));
+                if (!exists)
+                {
+                    Console.WriteLine($"[LLM] Configured model '{config.LanguageModel.ModelName}' is NOT available at {config.LanguageModel.ServiceUrl}.");
+                    Console.WriteLine("Please update appsettings.json to one of the available models above.");
+                    PromptAndExit();
+                    return;
+                }
+                Console.WriteLine($"[LLM] Using model: {config.LanguageModel.ModelName}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LLM] Failed to retrieve available models: {ex.Message}");
+                PromptAndExit();
+                return;
+            }
             
             // Subscribe to transcription events
             if (sttService is SpeechToTextService speechToTextService)
@@ -139,6 +168,13 @@ namespace ErnestAi.Host
                 await warmupOrchestrator.StopAsync();
             }
         }
+
+        private static void PromptAndExit()
+        {
+            Console.WriteLine("Press any key to close...");
+            try { Console.ReadKey(true); } catch { /* ignore */ }
+            Environment.Exit(1);
+        }
         
         private static void ConfigureServices(IServiceCollection services, AppConfig config)
         {
@@ -163,9 +199,14 @@ namespace ErnestAi.Host
                     config.SpeechToText.ModelUrl,
                     config.SpeechToText));
                 
-            services.AddSingleton<ILanguageModelService>(provider => 
-                new OllamaLanguageModelService(
-                    config.LanguageModel.ServiceUrl));
+            services.AddSingleton<ILanguageModelService>(provider =>
+            {
+                var svc = new OllamaLanguageModelService(config.LanguageModel.ServiceUrl)
+                {
+                    CurrentModel = config.LanguageModel.ModelName
+                };
+                return svc;
+            });
                 
             services.AddTransient<ITextToSpeechService>(provider => 
                 new TextToSpeechService());
