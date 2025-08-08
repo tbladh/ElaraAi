@@ -35,6 +35,11 @@ The ErnestAi.Plugins project implements a plugin system that allows for extendin
 - System.Reflection - For dynamic assembly loading
 - System.Composition - For plugin discovery and composition
 
+## Current State
+- Plugin abstractions are defined in Core (`IPluginManager`, `IPlugin`).
+- Plugin infrastructure scaffolding planned; not required for the minimal conversational pipeline yet.
+- Integration points will be composed by Host once initial plugins are implemented.
+
 ## Implementation Notes
 - Uses MEF (Managed Extensibility Framework) or similar for plugin discovery
 - Implements proper assembly loading contexts to avoid conflicts
@@ -52,3 +57,6 @@ The ErnestAi.Plugins project implements a plugin system that allows for extendin
 - Root INFO.ai: `../INFO.ai`
 - Core interfaces: `../ErnestAi.Core/INFO.ai`
 - Tool execution: `../ErnestAi.Tools/INFO.ai`
+
+## Key Files
+- (Placeholder) Plugin manager and example plugin classes when implemented

@@ -35,6 +35,12 @@ The ErnestAi.Speech project handles speech-to-text (STT) and text-to-speech (TTS
 - Whisper.net - For local speech recognition (implementation detail)
 - System.Speech - For text-to-speech synthesis (implementation detail)
 
+## Current State
+- STT uses Whisper.net; accepts finalized WAV `Stream` from `ErnestAi.Audio/AudioProcessor`.
+- Instrumented to optionally output transcription to console, controlled by host config.
+- TTS uses System.Speech; LINQ-based voice selection.
+- Stream handling hardened to avoid closed/disposed streams.
+
 ## Implementation Notes
 - Uses Whisper models for high-quality speech recognition
 - Implements streaming transcription for real-time applications
@@ -52,3 +58,7 @@ The ErnestAi.Speech project handles speech-to-text (STT) and text-to-speech (TTS
 - Root INFO.ai: `../INFO.ai`
 - Core interfaces: `../ErnestAi.Core/INFO.ai`
 - Audio processing: `../ErnestAi.Audio/INFO.ai`
+
+## Key Files
+- `SpeechToTextService.cs` — Whisper.net transcription, console-output toggle
+- `TextToSpeechService.cs` — System.Speech synthesis and voice enumeration

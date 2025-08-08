@@ -59,6 +59,15 @@ The ErnestAi solution follows a modular architecture with the following structur
 
 The original ErnestAi project is maintained separately as a reference implementation.
 
+## Current State Summary
+- Strict config-driven startup. Wake word is loaded from `appsettings.json` at startup and validated. Missing/invalid config is a fatal error.
+- Modular pipeline working: Wake word detection → audio capture → STT (Whisper) → LLM (Ollama) → TTS.
+- Recent fixes:
+  - Correct stream lifecycle in `ErnestAi.Audio` (`AudioProcessor`) mirroring `WakeWordDetector` robustness.
+  - Prevented premature stream disposal via `NAudio.Utils.IgnoreDisposeStream`.
+  - Added synchronization to wait for first audio and for `RecordingStopped` before finalizing WAV.
+  - Minimum recorded size enforced to avoid invalid WAV inputs to Whisper.
+
 ## Project INFO.ai Files
 - This file: `./INFO.ai` - Root project information
 - `./ErnestAi.Core/INFO.ai` - Core interfaces and shared components
@@ -70,6 +79,8 @@ The original ErnestAi project is maintained separately as a reference implementa
 - `./ErnestAi.Configuration/INFO.ai` - Configuration management
 - `./ErnestAi.Host/INFO.ai` - Application host
 
+Each project-level INFO.ai documents its purpose, key components, dependencies, development guidelines, and links back to this root file.
+
 ## Project Dependencies
 - All projects reference ErnestAi.Core for shared interfaces
 - ErnestAi.Host references all other projects to compose the full application
@@ -79,6 +90,16 @@ The original ErnestAi project is maintained separately as a reference implementa
   - Establishes proper dependency tracking
   - Handles output file copying through standard MSBuild behavior
 - This approach maintains simplicity and follows .NET best practices
+
+## Key Solution Files (selected)
+- Host entrypoint: `ErnestAi.Host/Program.cs`
+- Wake word detector: `ErnestAi.Audio/WakeWordDetector.cs`
+- Audio processor: `ErnestAi.Audio/AudioProcessor.cs`
+- STT service: `ErnestAi.Speech/SpeechToTextService.cs`
+- TTS service: `ErnestAi.Speech/TextToSpeechService.cs`
+- LLM service: `ErnestAi.Intelligence/OllamaLanguageModelService.cs`
+- Core interfaces (examples): `ErnestAi.Core/Interfaces/*.cs`
+- Configuration model: `ErnestAi.Configuration/AppConfig.cs` (and related files)
 
 ## Core Interfaces
 The ErnestAi.Core project defines the following key interfaces:
@@ -114,7 +135,7 @@ The ErnestAi.Core project defines the following key interfaces:
    - `IPlugin` - Plugin interface
 
 ## Build and Run
-TBD
+The user builds and runs manually. Do not run build or deploy commands automatically. See project READMEs for details.
 
 ## Architecture Diagram
 ```

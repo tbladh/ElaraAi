@@ -39,6 +39,11 @@ The ErnestAi.Configuration project handles all configuration management for the 
 - ErnestAi.Core - For core interfaces
 - Microsoft.Extensions.Configuration - For configuration framework
 
+## Current State
+- Configuration is mandatory and validated at startup; missing/invalid values are fatal.
+- `AppConfig` provides a `Validate()` method and strict loading via `LoadAsync()`.
+- Wake word, STT output toggle, model paths/URLs, and LLM service URL are all config-driven.
+
 ## Implementation Notes
 - Uses standard .NET configuration patterns
 - Implements proper validation for all configuration settings
@@ -55,3 +60,8 @@ The ErnestAi.Configuration project handles all configuration management for the 
 ## Related Files
 - Root INFO.ai: `../INFO.ai`
 - Core interfaces: `../ErnestAi.Core/INFO.ai`
+ - Host composition: `../ErnestAi.Host/INFO.ai`
+
+## Key Files
+- `AppConfig.cs` — root configuration model, load/validate logic
+- `appsettings.json` (in `ErnestAi.Host/`) — primary configuration file consumed at startup

@@ -55,3 +55,17 @@ The ErnestAi.Host project serves as the main entry point and composition root fo
 ## Related Files
 - Root INFO.ai: `../INFO.ai`
 - Core interfaces: `../ErnestAi.Core/INFO.ai`
+ - Audio processing: `../ErnestAi.Audio/INFO.ai`
+ - Speech services: `../ErnestAi.Speech/INFO.ai`
+ - Intelligence services: `../ErnestAi.Intelligence/INFO.ai`
+ - Tools: `../ErnestAi.Tools/INFO.ai`
+ - Plugins: `../ErnestAi.Plugins/INFO.ai`
+ - Configuration: `../ErnestAi.Configuration/INFO.ai`
+
+## Current State
+- Startup enforces validated configuration (`AppConfig.LoadAsync`) with fatal-on-missing/invalid values.
+- Composition wires wake word → audio capture → STT → LLM → TTS pipeline.
+- `RunErnestAiAsync()` ensures `IWakeWordDetector.WakeWord` is from config at startup.
+
+## Key Files
+- `Program.cs` — DI setup and pipeline orchestration

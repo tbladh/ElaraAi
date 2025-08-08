@@ -67,6 +67,10 @@ The ErnestAi.Core project serves as the foundation for the entire ErnestAi syste
 - This project has no external dependencies
 - All other ErnestAi projects depend on this project
 
+## Current State
+- Core interfaces stabilized for minimal modular pipeline: audio, wake word, STT, LLM, TTS, tools, configuration, and storage abstractions.
+- Downstream projects implement these contracts; changes here ripple across the solution.
+
 ## Development Guidelines
 - Keep this project lightweight and focused on interfaces and shared models
 - Avoid adding implementation code to this project
@@ -76,3 +80,6 @@ The ErnestAi.Core project serves as the foundation for the entire ErnestAi syste
 
 ## Related Files
 - Root INFO.ai: `../INFO.ai`
+ 
+## Key Files
+- Interfaces: `Interfaces/*.cs`

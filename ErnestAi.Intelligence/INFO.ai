@@ -34,6 +34,11 @@ The ErnestAi.Intelligence project handles all language model interactions and in
 - ErnestAi.Core - For core interfaces
 - HTTP client libraries - For API communication with language models
 
+## Current State
+- Uses Ollama locally via HTTP for LLM interactions.
+- Streaming responses supported; yield usage fixed to comply with C# constraints.
+- Configuration comes from Host `AppConfig` (service URL, model name, etc.).
+
 ## Implementation Notes
 - Uses Ollama for local language model inference
 - Implements proper error handling for model unavailability
@@ -50,3 +55,6 @@ The ErnestAi.Intelligence project handles all language model interactions and in
 ## Related Files
 - Root INFO.ai: `../INFO.ai`
 - Core interfaces: `../ErnestAi.Core/INFO.ai`
+
+## Key Files
+- `OllamaLanguageModelService.cs` — LLM client, sync and streaming responses

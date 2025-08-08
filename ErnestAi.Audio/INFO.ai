@@ -3,6 +3,14 @@
 ## Purpose
 The ErnestAi.Audio project handles all audio input and output operations for the ErnestAi system. It provides implementations for recording audio from microphones, playing audio through speakers, and managing audio streams for real-time processing.
 
+## Current State
+- Recording is synchronized and robust:
+  - Waits for first audio buffer before considering recording started.
+  - Waits for `RecordingStopped` to ensure all buffers are flushed.
+  - Uses `NAudio.Utils.IgnoreDisposeStream` to prevent premature disposal of underlying streams.
+  - Enforces a minimum WAV size before returning recorded audio.
+- Wake word detection is config-driven and validated at startup.
+
 ## Key Components
 
 ### Audio Processor
@@ -10,6 +18,7 @@ The ErnestAi.Audio project handles all audio input and output operations for the
 - Handles audio device management and selection
 - Provides audio recording and playback capabilities
 - Manages audio streaming for real-time processing
+  - Produces finalized WAV streams suitable for Whisper
 
 ### Voice Activity Detection
 - Detects when someone is speaking vs. silence
@@ -35,6 +44,8 @@ The ErnestAi.Audio project handles all audio input and output operations for the
 - Implements buffered audio processing for efficient memory usage
 - Supports configurable audio quality settings
 - Handles audio device errors and fallbacks
+ - Uses `IgnoreDisposeStream` to keep underlying memory streams alive until copied
+ - Aligns recording lifecycle with `WakeWordDetector` to ensure valid WAV output
 
 ## Development Guidelines
 - Keep audio processing code isolated from business logic
@@ -46,3 +57,9 @@ The ErnestAi.Audio project handles all audio input and output operations for the
 ## Related Files
 - Root INFO.ai: `../INFO.ai`
 - Core interfaces: `../ErnestAi.Core/INFO.ai`
+ - Speech services: `../ErnestAi.Speech/INFO.ai`
+ - Host composition: `../ErnestAi.Host/INFO.ai`
+
+## Key Files
+- `AudioProcessor.cs` — recording, playback, and stream lifecycle handling
+- `WakeWordDetector.cs` — wake word detection and WAV preparation

@@ -34,6 +34,11 @@ The ErnestAi.Tools project provides implementations for executing tools and comm
 - ErnestAi.Core - For core interfaces
 - System libraries for file access, network operations, etc.
 
+## Current State
+- Tool execution interfaces are defined in Core; initial executor scaffolding present.
+- No critical runtime tools required for the minimal conversational pipeline yet.
+- Designed to be injected into Host when tools are introduced.
+
 ## Implementation Notes
 - Implements proper security checks for sensitive operations
 - Provides clear error messages for failed tool executions
@@ -50,3 +55,6 @@ The ErnestAi.Tools project provides implementations for executing tools and comm
 ## Related Files
 - Root INFO.ai: `../INFO.ai`
 - Core interfaces: `../ErnestAi.Core/INFO.ai`
+
+## Key Files
+- (Placeholder) Tool executor and built-in tool classes when implemented
