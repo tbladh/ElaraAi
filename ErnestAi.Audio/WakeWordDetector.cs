@@ -2,12 +2,7 @@ using ErnestAi.Configuration;
 using ErnestAi.Core.Interfaces;
 using NAudio.Utils;
 using NAudio.Wave;
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using Whisper.net;
 
 namespace ErnestAi.Audio

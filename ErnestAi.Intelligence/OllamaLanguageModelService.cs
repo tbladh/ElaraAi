@@ -52,38 +52,50 @@ namespace ErnestAi.Intelligence
         /// </summary>
         public async Task<string> GetResponseAsync(string prompt, CancellationToken cancellationToken = default)
         {
-            // If no model is selected, try to select one
-            if (string.IsNullOrEmpty(CurrentModel))
-            {
-                var models = await GetAvailableModelsAsync();
-                foreach (var model in models)
-                {
-                    CurrentModel = model;
-                    break;
-                }
+            return await SendGenerateAsync(prompt, SystemPrompt, stream: false, cancellationToken);
+        }
 
-                if (string.IsNullOrEmpty(CurrentModel))
-                {
-                    throw new InvalidOperationException("No models available in Ollama.");
-                }
+        /// <summary>
+        /// Sends a minimal prompt without a system prompt. Useful for warmup/ping.
+        /// </summary>
+        public Task<string> BarePromptAsync(string prompt, CancellationToken cancellationToken = default)
+        {
+            return SendGenerateAsync(prompt, system: null, stream: false, cancellationToken);
+        }
+
+        private async Task EnsureModelSelectedAsync()
+        {
+            if (!string.IsNullOrEmpty(CurrentModel)) return;
+            var models = await GetAvailableModelsAsync();
+            foreach (var model in models)
+            {
+                CurrentModel = model;
+                break;
             }
 
-            // Prepare the request
+            if (string.IsNullOrEmpty(CurrentModel))
+            {
+                throw new InvalidOperationException("No models available in Ollama.");
+            }
+        }
+
+        private async Task<string> SendGenerateAsync(string prompt, string system, bool stream, CancellationToken cancellationToken)
+        {
+            await EnsureModelSelectedAsync();
+
             var request = new OllamaGenerateRequest
             {
                 Model = CurrentModel,
                 Prompt = prompt,
-                System = SystemPrompt,
-                Stream = false
+                System = system,
+                Stream = stream
             };
 
-            // Send the request
             var response = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            // Parse the response
             var result = await response.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cancellationToken: cancellationToken);
-            return result?.Response ?? "";
+            return result?.Response ?? string.Empty;
         }
 
         /// <summary>

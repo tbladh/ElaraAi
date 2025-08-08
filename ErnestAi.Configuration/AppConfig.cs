@@ -162,6 +162,11 @@ namespace ErnestAi.Configuration
         /// The model to use for language model inference
         /// </summary>
         public string ModelName { get; set; } = "llama2";
+
+        /// <summary>
+        /// Warmup configuration for language model providers
+        /// </summary>
+        public WarmupConfig Warmup { get; set; } = new WarmupConfig();
     }
     
     /// <summary>
@@ -189,5 +194,47 @@ namespace ErnestAi.Configuration
         /// The number of channels to use for audio recording
         /// </summary>
         public int Channels { get; set; } = 1;
+    }
+
+    /// <summary>
+    /// Warmup configuration container
+    /// </summary>
+    public class WarmupConfig
+    {
+        /// <summary>
+        /// Enables or disables the warmup subsystem
+        /// </summary>
+        public bool Enabled { get; set; } = false;
+
+        /// <summary>
+        /// Default interval (in seconds) used when a provider does not specify one
+        /// </summary>
+        public int DefaultIntervalSeconds { get; set; } = 180;
+
+        /// <summary>
+        /// Per-provider warmup settings
+        /// </summary>
+        public ProviderWarmupConfig[] Providers { get; set; } = Array.Empty<ProviderWarmupConfig>();
+    }
+
+    /// <summary>
+    /// Per-provider warmup settings
+    /// </summary>
+    public class ProviderWarmupConfig
+    {
+        /// <summary>
+        /// Provider name (e.g., "ollama", "openai")
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Enables or disables warmup for this provider
+        /// </summary>
+        public bool Enabled { get; set; } = false;
+
+        /// <summary>
+        /// Optional interval (in seconds); if null or 0, uses DefaultIntervalSeconds
+        /// </summary>
+        public int? IntervalSeconds { get; set; }
     }
 }

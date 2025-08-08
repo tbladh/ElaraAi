@@ -50,6 +50,7 @@ namespace ErnestAi.Host
             var sttService = serviceProvider.GetRequiredService<ISpeechToTextService>();
             var llmService = serviceProvider.GetRequiredService<ILanguageModelService>();
             var ttsService = serviceProvider.GetRequiredService<ITextToSpeechService>();
+            var warmupOrchestrator = serviceProvider.GetService<WarmupOrchestrator>();
             
             // Ensure wake word is set correctly from config
             wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
@@ -80,6 +81,12 @@ namespace ErnestAi.Host
             
             // Setup wake word detection handler
             var cts = new CancellationTokenSource();
+
+            // Start model warmup orchestrator (if enabled)
+            if (warmupOrchestrator != null)
+            {
+                await warmupOrchestrator.StartAsync(config, cts.Token);
+            }
             
             wakeWordDetector.WakeWordDetected += async (sender, e) =>
             {
@@ -127,6 +134,10 @@ namespace ErnestAi.Host
             // Clean up
             await wakeWordDetector.StopListeningAsync();
             cts.Cancel();
+            if (warmupOrchestrator != null)
+            {
+                await warmupOrchestrator.StopAsync();
+            }
         }
         
         private static void ConfigureServices(IServiceCollection services, AppConfig config)
@@ -152,12 +163,15 @@ namespace ErnestAi.Host
                     config.SpeechToText.ModelUrl,
                     config.SpeechToText));
                 
-            services.AddScoped<ILanguageModelService>(provider => 
+            services.AddSingleton<ILanguageModelService>(provider => 
                 new OllamaLanguageModelService(
                     config.LanguageModel.ServiceUrl));
                 
             services.AddTransient<ITextToSpeechService>(provider => 
                 new TextToSpeechService());
+
+            // Warmup orchestrator
+            services.AddSingleton<WarmupOrchestrator>();
         }
     }
 }
