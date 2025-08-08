@@ -22,7 +22,7 @@ namespace ErnestAi.Host
 
         public Task StartAsync(AppConfig config, CancellationToken appCancellationToken)
         {
-            if (config?.LanguageModel?.Warmup == null || !config.LanguageModel.Warmup.Enabled)
+            if (config?.Warmup == null || !config.Warmup.Enabled)
             {
                 return Task.CompletedTask;
             }
@@ -30,7 +30,7 @@ namespace ErnestAi.Host
             _cts = CancellationTokenSource.CreateLinkedTokenSource(appCancellationToken);
             var ct = _cts.Token;
 
-            var providers = config.LanguageModel.Warmup.Providers ?? Array.Empty<ProviderWarmupConfig>();
+            var providers = config.Warmup.Providers ?? Array.Empty<ProviderWarmupConfig>();
             if (providers.Length == 0) return Task.CompletedTask;
 
             // Map available services by ProviderName (case-insensitive)
@@ -47,7 +47,7 @@ namespace ErnestAi.Host
 
                 var intervalSecs = p.IntervalSeconds.HasValue && p.IntervalSeconds.Value > 0
                     ? p.IntervalSeconds.Value
-                    : Math.Max(1, config.LanguageModel.Warmup.DefaultIntervalSeconds);
+                    : Math.Max(1, config.Warmup.DefaultIntervalSeconds);
 
                 _runningTasks.Add(RunProviderLoopAsync(svc, p.Name, TimeSpan.FromSeconds(intervalSecs), ct));
             }

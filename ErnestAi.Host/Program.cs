@@ -4,6 +4,11 @@ using ErnestAi.Core.Interfaces;
 using ErnestAi.Intelligence;
 using ErnestAi.Speech;
 using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ErnestAi.Host
 {
@@ -22,18 +27,81 @@ namespace ErnestAi.Host
             // Display configuration information
             Console.WriteLine($"Wake Word: {config.WakeWord.WakeWord}");
             Console.WriteLine($"STT Model: {config.SpeechToText.ModelFileName}");
-            Console.WriteLine($"LLM Service URL: {config.LanguageModel.ServiceUrl}");
-            Console.WriteLine($"LLM Model: {config.LanguageModel.ModelName}");
+            Console.WriteLine($"LM candidates: {config.LanguageModels.Length}");
             Console.WriteLine($"STT Console Output: {(config.SpeechToText.OutputTranscriptionToConsole ? "Enabled" : "Disabled")}");
-            
+
+            // Select the first responsive language model by priority
+            var selectedLlm = await SelectLanguageModelAsync(config);
+            if (selectedLlm == null)
+            {
+                PromptAndExit();
+                return;
+            }
+
             // Setup dependency injection
             var services = new ServiceCollection();
-            ConfigureServices(services, config);
+            ConfigureServices(services, config, selectedLlm);
             
             var serviceProvider = services.BuildServiceProvider();
             
             // Initialize and start the application components
             await RunErnestAiAsync(serviceProvider, config);
+        }
+
+        private static async Task<ILanguageModelService?> SelectLanguageModelAsync(AppConfig config)
+        {
+            Console.WriteLine("Selecting language model by priority...");
+            var ordered = config.LanguageModels
+                .OrderBy(lm => lm.Priority)
+                .ThenBy(lm => lm.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (var lm in ordered)
+            {
+                Console.WriteLine($"[LM] Trying {lm.Name} (provider={lm.Provider}, model={lm.ModelName})...");
+                try
+                {
+                    ILanguageModelService svc = lm.Provider.Equals("ollama", StringComparison.OrdinalIgnoreCase)
+                        ? new OllamaLanguageModelService(lm.ServiceUrl) { CurrentModel = lm.ModelName, SystemPrompt = lm.SystemPrompt }
+                        : null;
+
+                    if (svc == null)
+                    {
+                        Console.WriteLine($"[LM] Provider '{lm.Provider}' not supported yet. Skipping.");
+                        continue;
+                    }
+
+                    // Verify model exists at provider
+                    var models = await svc.GetAvailableModelsAsync();
+                    var exists = models.Any(m => string.Equals(m, lm.ModelName, StringComparison.OrdinalIgnoreCase));
+                    if (!exists)
+                    {
+                        Console.WriteLine($"[LM] Model '{lm.ModelName}' not found at {lm.ServiceUrl}. Skipping.");
+                        continue;
+                    }
+
+                    // Quick ping to ensure responsiveness
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    if (svc is OllamaLanguageModelService ollama)
+                    {
+                        await ollama.BarePromptAsync(ErnestAi.Core.Globals.WarmupPrompt, cts.Token);
+                    }
+                    else
+                    {
+                        await svc.GetResponseAsync(ErnestAi.Core.Globals.WarmupPrompt, cts.Token);
+                    }
+
+                    Console.WriteLine($"[LM] Selected: {lm.Name} (provider={lm.Provider}, model={lm.ModelName})");
+                    return svc;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[LM] Candidate '{lm.Name}' failed: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine("[LM] No language model candidates responded successfully. Please check your configuration or providers.");
+            return null;
         }
         
         private static async Task RunErnestAiAsync(ServiceProvider serviceProvider, AppConfig config)
@@ -50,34 +118,6 @@ namespace ErnestAi.Host
             
             // Ensure wake word is set correctly from config
             wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
-
-            // List available models and validate configured model before starting warmup or listeners
-            try
-            {
-                var models = await llmService.GetAvailableModelsAsync();
-                Console.WriteLine("[LLM] Available models:");
-                foreach (var m in models)
-                {
-                    Console.WriteLine($" - {m}");
-                }
-                Console.WriteLine($"[LLM] Configured model: {config.LanguageModel.ModelName}");
-
-                var exists = models.Any(m => string.Equals(m, config.LanguageModel.ModelName, StringComparison.OrdinalIgnoreCase));
-                if (!exists)
-                {
-                    Console.WriteLine($"[LLM] Configured model '{config.LanguageModel.ModelName}' is NOT available at {config.LanguageModel.ServiceUrl}.");
-                    Console.WriteLine("Please update appsettings.json to one of the available models above.");
-                    PromptAndExit();
-                    return;
-                }
-                Console.WriteLine($"[LLM] Using model: {config.LanguageModel.ModelName}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[LLM] Failed to retrieve available models: {ex.Message}");
-                PromptAndExit();
-                return;
-            }
             
             // Subscribe to transcription events
             if (sttService is SpeechToTextService speechToTextService)
@@ -170,8 +210,8 @@ namespace ErnestAi.Host
             try { Console.ReadKey(true); } catch { /* ignore */ }
             Environment.Exit(1);
         }
-        
-        private static void ConfigureServices(IServiceCollection services, AppConfig config)
+
+        private static void ConfigureServices(IServiceCollection services, AppConfig config, ILanguageModelService selectedLlm)
         {
             // Register configuration
             services.AddSingleton(config);
@@ -194,15 +234,7 @@ namespace ErnestAi.Host
                     config.SpeechToText.ModelUrl,
                     config.SpeechToText));
                 
-            services.AddSingleton<ILanguageModelService>(provider =>
-            {
-                var svc = new OllamaLanguageModelService(config.LanguageModel.ServiceUrl)
-                {
-                    CurrentModel = config.LanguageModel.ModelName,
-                    SystemPrompt = config.LanguageModel.SystemPrompt
-                };
-                return svc;
-            });
+            services.AddSingleton<ILanguageModelService>(provider => selectedLlm);
                 
             services.AddTransient<ITextToSpeechService>(provider => 
                 new TextToSpeechService());

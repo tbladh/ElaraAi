@@ -21,9 +21,9 @@ namespace ErnestAi.Configuration
         public SpeechToTextConfig SpeechToText { get; set; } = new SpeechToTextConfig();
         
         /// <summary>
-        /// Configuration for language model
+        /// Configured language model entries ordered by Priority
         /// </summary>
-        public LanguageModelConfig LanguageModel { get; set; } = new LanguageModelConfig();
+        public LanguageModelEntry[] LanguageModels { get; set; } = Array.Empty<LanguageModelEntry>();
         
         /// <summary>
         /// Configuration for text-to-speech
@@ -34,6 +34,11 @@ namespace ErnestAi.Configuration
         /// Configuration for audio processing
         /// </summary>
         public AudioConfig Audio { get; set; } = new AudioConfig();
+
+        /// <summary>
+        /// Warmup configuration (moved to root to be provider-centric)
+        /// </summary>
+        public WarmupConfig Warmup { get; set; } = new WarmupConfig();
         
         /// <summary>
         /// Loads configuration from the specified file
@@ -93,20 +98,25 @@ namespace ErnestAi.Configuration
                 throw new InvalidOperationException($"Speech-to-text model filename is not configured in '{filePath}'.");
             }
             
-            // Validate language model configuration
-            if (string.IsNullOrWhiteSpace(config.LanguageModel?.ServiceUrl))
+            // Validate language models list
+            if (config.LanguageModels == null || config.LanguageModels.Length == 0)
             {
-                throw new InvalidOperationException($"Language model service URL is not configured in '{filePath}'.");
+                throw new InvalidOperationException($"No LanguageModels configured in '{filePath}'.");
             }
-            
-            if (string.IsNullOrWhiteSpace(config.LanguageModel?.ModelName))
+            foreach (var lm in config.LanguageModels)
             {
-                throw new InvalidOperationException($"Language model name is not configured in '{filePath}'.");
-            }
-
-            if (string.IsNullOrWhiteSpace(config.LanguageModel?.SystemPrompt))
-            {
-                throw new InvalidOperationException($"Language model system prompt is not configured in '{filePath}'.");
+                if (string.IsNullOrWhiteSpace(lm?.Name))
+                    throw new InvalidOperationException($"A LanguageModels entry is missing 'Name' in '{filePath}'.");
+                if (string.IsNullOrWhiteSpace(lm.Provider))
+                    throw new InvalidOperationException($"LanguageModels '{lm.Name}' is missing 'Provider'.");
+                if (string.IsNullOrWhiteSpace(lm.ServiceUrl))
+                    throw new InvalidOperationException($"LanguageModels '{lm.Name}' missing 'ServiceUrl' in '{filePath}'.");
+                if (string.IsNullOrWhiteSpace(lm.ModelName))
+                    throw new InvalidOperationException($"LanguageModels '{lm.Name}' missing 'ModelName' in '{filePath}'.");
+                if (string.IsNullOrWhiteSpace(lm.SystemPrompt))
+                    throw new InvalidOperationException($"LanguageModels '{lm.Name}' missing 'SystemPrompt' in '{filePath}'.");
+                if (lm.Priority <= 0)
+                    throw new InvalidOperationException($"LanguageModels '{lm.Name}' must have Priority >= 1 in '{filePath}'.");
             }
 
             // Validate audio configuration
@@ -170,29 +180,39 @@ namespace ErnestAi.Configuration
     }
     
     /// <summary>
-    /// Configuration for language model
+    /// A single language model candidate definition
     /// </summary>
-    public class LanguageModelConfig
+    public class LanguageModelEntry
     {
         /// <summary>
-        /// The base URL for the language model service
+        /// Friendly name to distinguish variants of the same model/provider
+        /// </summary>
+        public string Name { get; set; }
+
+        /// <summary>
+        /// Provider key, e.g. "ollama"
+        /// </summary>
+        public string Provider { get; set; }
+
+        /// <summary>
+        /// Base URL for the provider's API
         /// </summary>
         public string ServiceUrl { get; set; }
-        
+
         /// <summary>
-        /// The model to use for language model inference
+        /// Model identifier at the provider
         /// </summary>
         public string ModelName { get; set; }
 
         /// <summary>
-        /// The system prompt to use with the model
+        /// System prompt to use with this candidate
         /// </summary>
         public string SystemPrompt { get; set; }
 
         /// <summary>
-        /// Warmup configuration for language model providers
+        /// Priority (1 is highest)
         /// </summary>
-        public WarmupConfig Warmup { get; set; } = new WarmupConfig();
+        public int Priority { get; set; }
     }
     
     /// <summary>
