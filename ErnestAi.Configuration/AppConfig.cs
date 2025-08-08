@@ -103,6 +103,27 @@ namespace ErnestAi.Configuration
             {
                 throw new InvalidOperationException($"Language model name is not configured in '{filePath}'.");
             }
+
+            if (string.IsNullOrWhiteSpace(config.LanguageModel?.SystemPrompt))
+            {
+                throw new InvalidOperationException($"Language model system prompt is not configured in '{filePath}'.");
+            }
+
+            // Validate audio configuration
+            if (config.Audio == null || config.Audio.SampleRate <= 0)
+            {
+                throw new InvalidOperationException($"Audio sample rate must be specified and greater than 0 in '{filePath}'.");
+            }
+            if (config.Audio.Channels <= 0)
+            {
+                throw new InvalidOperationException($"Audio channels must be specified and greater than 0 in '{filePath}'.");
+            }
+
+            // Validate TTS configuration
+            if (string.IsNullOrWhiteSpace(config.TextToSpeech?.PreferredVoice))
+            {
+                throw new InvalidOperationException($"Preferred voice for text-to-speech is not configured in '{filePath}'.");
+            }
         }
     }
     
@@ -135,17 +156,17 @@ namespace ErnestAi.Configuration
         /// <summary>
         /// The model file name for speech-to-text
         /// </summary>
-        public string ModelFileName { get; set; } = "ggml-base.en.bin";
+        public string ModelFileName { get; set; }
         
         /// <summary>
         /// The URL to download the model from if it doesn't exist locally
         /// </summary>
-        public string ModelUrl { get; set; } = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin";
+        public string ModelUrl { get; set; }
         
         /// <summary>
         /// Whether to output transcribed text to the console
         /// </summary>
-        public bool OutputTranscriptionToConsole { get; set; } = true;
+        public bool OutputTranscriptionToConsole { get; set; }
     }
     
     /// <summary>
@@ -156,12 +177,17 @@ namespace ErnestAi.Configuration
         /// <summary>
         /// The base URL for the language model service
         /// </summary>
-        public string ServiceUrl { get; set; } = "http://127.0.0.1:11434";
+        public string ServiceUrl { get; set; }
         
         /// <summary>
         /// The model to use for language model inference
         /// </summary>
-        public string ModelName { get; set; } = "llama2";
+        public string ModelName { get; set; }
+
+        /// <summary>
+        /// The system prompt to use with the model
+        /// </summary>
+        public string SystemPrompt { get; set; }
 
         /// <summary>
         /// Warmup configuration for language model providers
@@ -177,7 +203,7 @@ namespace ErnestAi.Configuration
         /// <summary>
         /// The preferred voice name to use for text-to-speech
         /// </summary>
-        public string PreferredVoice { get; set; } = "";
+        public string PreferredVoice { get; set; }
     }
     
     /// <summary>
@@ -188,12 +214,12 @@ namespace ErnestAi.Configuration
         /// <summary>
         /// The sample rate to use for audio recording
         /// </summary>
-        public int SampleRate { get; set; } = 16000;
+        public int SampleRate { get; set; }
         
         /// <summary>
         /// The number of channels to use for audio recording
         /// </summary>
-        public int Channels { get; set; } = 1;
+        public int Channels { get; set; }
     }
 
     /// <summary>

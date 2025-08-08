@@ -27,7 +27,7 @@ namespace ErnestAi.Intelligence
         /// <summary>
         /// Gets or sets the system prompt to use with the model
         /// </summary>
-        public string SystemPrompt { get; set; } = "You are Ernest, a helpful AI assistant.";
+        public string SystemPrompt { get; set; }
 
         /// <summary>
         /// Gets the name of the language model service provider
@@ -38,7 +38,7 @@ namespace ErnestAi.Intelligence
         /// Creates a new instance of the OllamaLanguageModelService
         /// </summary>
         /// <param name="baseUrl">The base URL of the Ollama API</param>
-        public OllamaLanguageModelService(string baseUrl = "http://127.0.0.1:11434")
+        public OllamaLanguageModelService(string baseUrl)
         {
             _baseUrl = baseUrl;
             _httpClient = new HttpClient

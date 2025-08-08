@@ -4,11 +4,6 @@ using ErnestAi.Core.Interfaces;
 using ErnestAi.Intelligence;
 using ErnestAi.Speech;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace ErnestAi.Host
 {
@@ -203,7 +198,8 @@ namespace ErnestAi.Host
             {
                 var svc = new OllamaLanguageModelService(config.LanguageModel.ServiceUrl)
                 {
-                    CurrentModel = config.LanguageModel.ModelName
+                    CurrentModel = config.LanguageModel.ModelName,
+                    SystemPrompt = config.LanguageModel.SystemPrompt
                 };
                 return svc;
             });
