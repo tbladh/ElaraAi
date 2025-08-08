@@ -118,6 +118,22 @@ namespace ErnestAi.Host
             
             // Ensure wake word is set correctly from config
             wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
+
+            // Informational: list available models for the connected provider and show the selected one
+            try
+            {
+                var models = await llmService.GetAvailableModelsAsync();
+                Console.WriteLine("[LLM] Available models:");
+                foreach (var m in models)
+                {
+                    Console.WriteLine($" - {m}");
+                }
+                Console.WriteLine($"[LLM] Selected model: {llmService.CurrentModel} (provider={llmService.ProviderName})");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LLM] Failed to retrieve available models: {ex.Message}");
+            }
             
             // Subscribe to transcription events
             if (sttService is SpeechToTextService speechToTextService)
