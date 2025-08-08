@@ -1,5 +1,6 @@
 using ErnestAi.Core.Interfaces;
 using NAudio.Wave;
+using NAudio.Utils;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,6 +20,11 @@ namespace ErnestAi.Audio
         private readonly WaveFormat _waveFormat;
         private bool _isRecording;
         private readonly SemaphoreSlim _recordingSemaphore = new SemaphoreSlim(1, 1);
+        
+        // Synchronization and diagnostics
+        private TaskCompletionSource<bool> _firstDataTcs;
+        private TaskCompletionSource<bool> _recordingStoppedTcs;
+        private long _bytesWritten;
 
         public AudioProcessor(int sampleRate = 16000, int channels = 1)
         {
@@ -39,11 +45,17 @@ namespace ErnestAi.Audio
                 }
 
                 _memoryStream = new MemoryStream();
-                _writer = new WaveFileWriter(_memoryStream, _waveFormat);
+                // Use IgnoreDisposeStream so disposing the writer does NOT close _memoryStream
+                _writer = new WaveFileWriter(new IgnoreDisposeStream(_memoryStream), _waveFormat);
+                
+                _bytesWritten = 0;
+                _firstDataTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _recordingStoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 
                 _waveIn = new WaveInEvent
                 {
-                    WaveFormat = _waveFormat
+                    WaveFormat = _waveFormat,
+                    BufferMilliseconds = 250
                 };
 
                 _waveIn.DataAvailable += (s, a) =>
@@ -51,11 +63,31 @@ namespace ErnestAi.Audio
                     if (_writer != null)
                     {
                         _writer.Write(a.Buffer, 0, a.BytesRecorded);
+                        _bytesWritten += a.BytesRecorded;
+                        if (!_firstDataTcs.Task.IsCompleted)
+                        {
+                            _firstDataTcs.TrySetResult(true);
+                        }
+                    }
+                };
+
+                _waveIn.RecordingStopped += (s, a) =>
+                {
+                    if (!_recordingStoppedTcs.Task.IsCompleted)
+                    {
+                        _recordingStoppedTcs.TrySetResult(true);
                     }
                 };
 
                 _isRecording = true;
                 _waveIn.StartRecording();
+                
+                // Ensure we actually receive audio before returning
+                var firstDataWait = await Task.WhenAny(_firstDataTcs.Task, Task.Delay(1000));
+                if (firstDataWait != _firstDataTcs.Task)
+                {
+                    throw new InvalidOperationException("No audio data received from input device.");
+                }
             }
             finally
             {
@@ -71,23 +103,69 @@ namespace ErnestAi.Audio
             await _recordingSemaphore.WaitAsync();
             try
             {
-                if (!_isRecording)
+                if (!_isRecording || _memoryStream == null)
                 {
                     return new MemoryStream();
                 }
 
-                _waveIn.StopRecording();
+                // Signal stop and wait for the device to fully stop delivering data
+                if (_recordingStoppedTcs == null)
+                {
+                    _recordingStoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                }
+
+                _waveIn?.StopRecording();
                 _isRecording = false;
                 
-                _waveIn.Dispose();
+                // Wait briefly for RecordingStopped to ensure all buffers flushed
+                await Task.WhenAny(_recordingStoppedTcs.Task, Task.Delay(1000));
+                
+                _waveIn?.Dispose();
                 _waveIn = null;
                 
-                _writer.Flush();
-                _writer.Dispose();
+                _writer?.Flush();
+                _writer?.Dispose();
                 _writer = null;
                 
-                _memoryStream.Position = 0;
-                return _memoryStream;
+                // Create a new memory stream with the recorded data
+                var resultStream = new MemoryStream();
+                
+                try
+                {
+                    // Only try to copy if the memory stream is still usable
+                    if (_memoryStream != null && _memoryStream.CanRead)
+                    {
+                        _memoryStream.Position = 0;
+                        await _memoryStream.CopyToAsync(resultStream);
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                    // If the stream was already disposed, just return an empty stream
+                }
+                finally
+                {
+                    try
+                    {
+                        _memoryStream?.Dispose();
+                    }
+                    catch
+                    {
+                        // Ignore any errors during disposal
+                    }
+                    _memoryStream = null;
+                }
+                
+                resultStream.Position = 0;
+                
+                // Validate minimal size: header + ~1s of audio
+                var minLength = 44 + _waveFormat.AverageBytesPerSecond; // WAV header + ~1 second
+                if (resultStream.Length < minLength)
+                {
+                    throw new InvalidOperationException($"Recorded audio too short ({resultStream.Length} bytes, wrote {_bytesWritten} bytes).");
+                }
+                
+                return resultStream;
             }
             finally
             {
