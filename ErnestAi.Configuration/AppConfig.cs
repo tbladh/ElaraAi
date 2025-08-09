@@ -11,6 +11,11 @@ namespace ErnestAi.Configuration
     public class AppConfig
     {
         /// <summary>
+        /// Optional root-level system prompt. If a model has its own SystemPrompt, it overrides this value.
+        /// </summary>
+        public string? SystemPrompt { get; set; }
+
+        /// <summary>
         /// Configuration for wake word detection
         /// </summary>
         public WakeWordConfig WakeWord { get; set; } = new WakeWordConfig();
@@ -108,6 +113,7 @@ namespace ErnestAi.Configuration
             {
                 throw new InvalidOperationException($"No LanguageModels configured in '{filePath}'.");
             }
+            bool anyModelHasPrompt = false;
             foreach (var lm in config.LanguageModels)
             {
                 if (string.IsNullOrWhiteSpace(lm?.Name))
@@ -118,10 +124,14 @@ namespace ErnestAi.Configuration
                     throw new InvalidOperationException($"LanguageModels '{lm.Name}' missing 'ServiceUrl' in '{filePath}'.");
                 if (string.IsNullOrWhiteSpace(lm.ModelName))
                     throw new InvalidOperationException($"LanguageModels '{lm.Name}' missing 'ModelName' in '{filePath}'.");
-                if (string.IsNullOrWhiteSpace(lm.SystemPrompt))
-                    throw new InvalidOperationException($"LanguageModels '{lm.Name}' missing 'SystemPrompt' in '{filePath}'.");
+                if (!string.IsNullOrWhiteSpace(lm.SystemPrompt)) anyModelHasPrompt = true;
                 if (lm.Priority <= 0)
                     throw new InvalidOperationException($"LanguageModels '{lm.Name}' must have Priority >= 1 in '{filePath}'.");
+            }
+            // Ensure that at least one prompt source exists: either a root prompt or at least one model-level prompt
+            if (string.IsNullOrWhiteSpace(config.SystemPrompt) && !anyModelHasPrompt)
+            {
+                throw new InvalidOperationException($"No SystemPrompt configured. Provide a root-level 'SystemPrompt' or set 'SystemPrompt' for at least one LanguageModels entry in '{filePath}'.");
             }
 
             // Validate audio configuration
@@ -223,9 +233,9 @@ namespace ErnestAi.Configuration
         public string ModelName { get; set; }
 
         /// <summary>
-        /// System prompt to use with this candidate
+        /// Optional system prompt to use with this candidate. If omitted, root-level SystemPrompt is used.
         /// </summary>
-        public string SystemPrompt { get; set; }
+        public string? SystemPrompt { get; set; }
 
         /// <summary>
         /// Priority (1 is highest)

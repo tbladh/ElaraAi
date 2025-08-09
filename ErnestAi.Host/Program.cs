@@ -30,6 +30,7 @@ namespace ErnestAi.Host
             Console.WriteLine($"STT Model: {config.SpeechToText.ModelFileName}");
             Console.WriteLine($"LM candidates: {config.LanguageModels.Length}");
             Console.WriteLine($"STT Console Output: {(config.SpeechToText.OutputTranscriptionToConsole ? "Enabled" : "Disabled")}");
+            Console.WriteLine($"System Prompt (root): {(!string.IsNullOrWhiteSpace(config.SystemPrompt) ? config.SystemPrompt : "<none>")}");
 
             // Select the first responsive language model by priority
             var selectedLlm = await SelectLanguageModelAsync(config);
@@ -62,11 +63,15 @@ namespace ErnestAi.Host
                 Console.WriteLine($"[LM] Trying {lm.Name} (provider={lm.Provider}, model={lm.ModelName})...");
                 try
                 {
+                    var effectivePrompt = !string.IsNullOrWhiteSpace(lm.SystemPrompt)
+                        ? lm.SystemPrompt
+                        : config.SystemPrompt;
+
                     ILanguageModelService? svc = lm.Provider.Equals("ollama", StringComparison.OrdinalIgnoreCase)
                         ? new OllamaLanguageModelService(lm.ServiceUrl)
                         {
                             CurrentModel = lm.ModelName,
-                            SystemPrompt = lm.SystemPrompt,
+                            SystemPrompt = effectivePrompt ?? string.Empty,
                             OutputFilters = (lm.Filter != null) ? new List<string>(lm.Filter) : new List<string>()
                         }
                         : null;
