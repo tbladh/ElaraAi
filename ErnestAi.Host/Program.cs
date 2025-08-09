@@ -45,20 +45,6 @@ namespace ErnestAi.Host
             
             var serviceProvider = services.BuildServiceProvider();
 
-            // Initialize acknowledgement cache (if enabled)
-            try
-            {
-                var ack = serviceProvider.GetService<AcknowledgementService>();
-                if (ack != null)
-                {
-                    await ack.InitializeAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Ack] Initialization failed: {ex.Message}");
-            }
-
             // Initialize and start the application components
             await RunErnestAiAsync(serviceProvider, config);
         }
@@ -135,7 +121,31 @@ namespace ErnestAi.Host
             var llmService = serviceProvider.GetRequiredService<ILanguageModelService>();
             var ttsService = serviceProvider.GetRequiredService<ITextToSpeechService>();
             var warmupOrchestrator = serviceProvider.GetService<WarmupOrchestrator>();
-            var acknowledgement = serviceProvider.GetService<AcknowledgementService>();
+            var announcement = serviceProvider.GetService<AnnouncementService>();
+
+            // Initialize announcement service with key policy and cache dir, then optionally preload phrase
+            if (announcement != null)
+            {
+                try
+                {
+                    var voice = !string.IsNullOrWhiteSpace(config.TextToSpeech?.PreferredVoice)
+                        ? config.TextToSpeech!.PreferredVoice!
+                        : (ttsService.CurrentVoice ?? string.Empty);
+                    var rate = ttsService.SpeechRate;
+                    var pitch = ttsService.SpeechPitch;
+                    var cacheDir = config.Acknowledgement?.CacheDirectory;
+                    await announcement.InitializeAsync(voice, rate, pitch, cacheDir);
+
+                    if (config.Acknowledgement?.Enabled == true && !string.IsNullOrWhiteSpace(config.Acknowledgement.Phrase))
+                    {
+                        await announcement.PreloadAsync(config.Acknowledgement.Phrase);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Ann] Initialization failed: {ex.Message}");
+                }
+            }
             
             // Ensure wake word is set correctly from config
             wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
@@ -195,10 +205,10 @@ namespace ErnestAi.Host
                 
                 try
                 {
-                    // Play acknowledgement (lets the user know we're ready)
-                    if (acknowledgement != null && acknowledgement.Enabled)
+                    // Play announcement (lets the user know we're ready)
+                    if (announcement != null && config.Acknowledgement?.Enabled == true && !string.IsNullOrWhiteSpace(config.Acknowledgement.Phrase))
                     {
-                        await acknowledgement.PlayAsync();
+                        await announcement.PlayAsync(config.Acknowledgement.Phrase);
                         var pauseMs = config.Acknowledgement?.PauseAfterMs ?? 0;
                         if (pauseMs > 0)
                         {
@@ -287,11 +297,11 @@ namespace ErnestAi.Host
             services.AddTransient<ITextToSpeechService>(provider => 
                 new TextToSpeechService());
 
-            // Utilities and acknowledgement
+            // Utilities and announcement
             services.AddSingleton<IAudioPlayer, AudioPlayer>();
             services.AddSingleton<ICacheService, FileCacheService>();
             services.AddSingleton<IContentHashProvider, Md5HashProvider>();
-            services.AddSingleton<AcknowledgementService>();
+            services.AddSingleton<AnnouncementService>();
 
             // Warmup orchestrator
             services.AddSingleton<WarmupOrchestrator>();
