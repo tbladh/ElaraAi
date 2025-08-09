@@ -128,14 +128,46 @@ namespace ErnestAi.Host
             var warmupOrchestrator = serviceProvider.GetService<WarmupOrchestrator>();
             var announcement = serviceProvider.GetService<AnnouncementService>();
 
+            // List available TTS voices and attempt to select configured PreferredVoice
+            try
+            {
+                var voices = (await ttsService.GetAvailableVoicesAsync()).ToList();
+                Console.WriteLine("[TTS] Available voices:");
+                foreach (var v in voices)
+                {
+                    Console.WriteLine($"  - {v}");
+                }
+
+                var preferred = config.TextToSpeech?.PreferredVoice;
+                if (!string.IsNullOrWhiteSpace(preferred))
+                {
+                    var match = voices.FirstOrDefault(v => string.Equals(v, preferred, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(match))
+                    {
+                        ttsService.CurrentVoice = match;
+                        Console.WriteLine($"[TTS] Selected voice: '{match}'");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[TTS] PreferredVoice '{preferred}' not found. Using current voice '{ttsService.CurrentVoice ?? "<none>"}'.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[TTS] No PreferredVoice configured. Using current voice '{ttsService.CurrentVoice ?? "<none>"}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[TTS] Failed to enumerate/select voices: {ex.Message}");
+            }
+
             // Initialize announcement service with key policy and cache dir, then optionally preload phrase
             if (announcement != null)
             {
                 try
                 {
-                    var voice = !string.IsNullOrWhiteSpace(config.TextToSpeech?.PreferredVoice)
-                        ? config.TextToSpeech!.PreferredVoice!
-                        : (ttsService.CurrentVoice ?? string.Empty);
+                    var voice = ttsService.CurrentVoice ?? string.Empty;
                     var rate = ttsService.SpeechRate;
                     var pitch = ttsService.SpeechPitch;
                     var cacheDir = config.Acknowledgement?.CacheDirectory;

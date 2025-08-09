@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Speech.Synthesis;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace ErnestAi.Speech
 {
@@ -49,8 +50,20 @@ namespace ErnestAi.Speech
             // Set default voice
             try
             {
-                _synthesizer.SelectVoiceByHints(VoiceGender.NotSet, VoiceAge.NotSet);
-                CurrentVoice = _synthesizer.Voice.Name;
+                // Prefer current synthesizer default; otherwise pick the first installed voice
+                var installed = _synthesizer.GetInstalledVoices();
+                if (installed != null && installed.Count > 0)
+                {
+                    var first = installed.First().VoiceInfo.Name;
+                    _synthesizer.SelectVoice(first);
+                    CurrentVoice = _synthesizer.Voice?.Name;
+                }
+                else
+                {
+                    // Fallback to hints, though on some systems this may still be the same as default
+                    _synthesizer.SelectVoiceByHints(VoiceGender.NotSet, VoiceAge.NotSet);
+                    CurrentVoice = _synthesizer.Voice?.Name;
+                }
             }
             catch
             {
@@ -132,7 +145,34 @@ namespace ErnestAi.Speech
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error setting voice: {ex.Message}");
+                    Console.WriteLine($"[TTS] Error setting voice '{CurrentVoice}': {ex.Message}");
+                    // Try case-insensitive match among installed voices
+                    try
+                    {
+                        var match = _synthesizer.GetInstalledVoices()
+                            .Select(v => v.VoiceInfo.Name)
+                            .FirstOrDefault(name => string.Equals(name, CurrentVoice, StringComparison.OrdinalIgnoreCase));
+                        if (!string.IsNullOrEmpty(match))
+                        {
+                            _synthesizer.SelectVoice(match);
+                            CurrentVoice = match;
+                        }
+                        else
+                        {
+                            // Fallback to first installed voice
+                            var first = _synthesizer.GetInstalledVoices().FirstOrDefault()?.VoiceInfo.Name;
+                            if (!string.IsNullOrEmpty(first))
+                            {
+                                _synthesizer.SelectVoice(first);
+                                CurrentVoice = first;
+                                Console.WriteLine($"[TTS] Falling back to voice '{first}'.");
+                            }
+                        }
+                    }
+                    catch (Exception ex2)
+                    {
+                        Console.WriteLine($"[TTS] Voice fallback failed: {ex2.Message}");
+                    }
                 }
             }
 
