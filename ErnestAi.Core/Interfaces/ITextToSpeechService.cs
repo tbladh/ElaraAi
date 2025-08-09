@@ -34,19 +34,28 @@ namespace ErnestAi.Core.Interfaces
         Task<IEnumerable<string>> GetAvailableVoicesAsync();
         
         /// <summary>
-        /// Gets or sets the currently selected voice
+        /// Initializes the service exactly once with desired voice, rate, and pitch, and makes it immutable thereafter.
+        /// Subsequent calls are no-ops.
         /// </summary>
-        string CurrentVoice { get; set; }
+        /// <param name="voice">Preferred voice name (nullable)</param>
+        /// <param name="rate">Preferred rate multiplier (1.0 = normal)</param>
+        /// <param name="pitch">Preferred pitch multiplier (1.0 = normal)</param>
+        void InitializeOnce(string? voice, float? rate, float? pitch);
+
+        /// <summary>
+        /// Gets the currently selected voice
+        /// </summary>
+        string CurrentVoice { get; }
         
         /// <summary>
-        /// Gets or sets the speech rate
+        /// Gets the speech rate
         /// </summary>
-        float SpeechRate { get; set; }
+        float SpeechRate { get; }
         
         /// <summary>
-        /// Gets or sets the speech pitch
+        /// Gets the speech pitch
         /// </summary>
-        float SpeechPitch { get; set; }
+        float SpeechPitch { get; }
         
         /// <summary>
         /// Gets the name of the text-to-speech service provider

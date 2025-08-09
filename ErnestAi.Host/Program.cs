@@ -143,6 +143,7 @@ namespace ErnestAi.Host
             var announcement = serviceProvider.GetService<AnnouncementService>();
 
             // List available TTS voices and attempt to select configured PreferredVoice
+            string? selectedVoice = null;
             try
             {
                 var voices = (await ttsService.GetAvailableVoicesAsync()).ToList();
@@ -158,7 +159,7 @@ namespace ErnestAi.Host
                     var match = voices.FirstOrDefault(v => string.Equals(v, preferred, StringComparison.OrdinalIgnoreCase));
                     if (!string.IsNullOrEmpty(match))
                     {
-                        ttsService.CurrentVoice = match;
+                        selectedVoice = match;
                         Console.WriteLine($"[TTS] Selected voice: '{match}'");
                     }
                     else
@@ -174,6 +175,14 @@ namespace ErnestAi.Host
             catch (Exception ex)
             {
                 Console.WriteLine($"[TTS] Failed to enumerate/select voices: {ex.Message}");
+            }
+
+            // Seal TTS settings for process lifetime (immutable pattern)
+            if (ttsService is TextToSpeechService ttsConcrete)
+            {
+                // Use selectedVoice if found; otherwise keep existing defaults
+                var voiceToUse = selectedVoice ?? ttsService.CurrentVoice;
+                ttsConcrete.InitializeOnce(voiceToUse, ttsService.SpeechRate, ttsService.SpeechPitch);
             }
 
             // Initialize announcement service with key policy and cache dir, then optionally preload phrase
@@ -345,7 +354,7 @@ namespace ErnestAi.Host
                 
             services.AddSingleton<ILanguageModelService>(provider => selectedLlm);
                 
-            services.AddTransient<ITextToSpeechService>(provider => 
+            services.AddSingleton<ITextToSpeechService>(provider => 
                 new TextToSpeechService());
 
             // Utilities and announcement

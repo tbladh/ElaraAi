@@ -2,6 +2,6 @@ namespace ErnestAi.Core
 {
     public static class Globals
     {
-        public const string WarmupPrompt = "ping";
+        public const string WarmupPrompt = "ping (answer with \"pong\")";
     }
 }

@@ -66,6 +66,7 @@ namespace ErnestAi.Host
             if (!await _cache.TryReadAsync(key, _ => path, ms))
             {
                 // synthesize and write to cache
+                Console.WriteLine($"[Ann] Synth (preload): voice='{_tts.CurrentVoice}', rate={_tts.SpeechRate:F2}, pitch={_tts.SpeechPitch:F2}");
                 using var wav = await _tts.SpeakAsync(phrase);
                 await _cache.WriteAsync(key, _ => path, wav);
                 ms.SetLength(0);
@@ -93,6 +94,7 @@ namespace ErnestAi.Host
                         var hit = await _cache.TryReadAsync(key, _ => path, ms);
                         if (!hit)
                         {
+                            Console.WriteLine($"[Ann] Synth (miss): voice='{_tts.CurrentVoice}', rate={_tts.SpeechRate:F2}, pitch={_tts.SpeechPitch:F2}");
                             using var wav = await _tts.SpeakAsync(phrase);
                             await _cache.WriteAsync(key, _ => path, wav);
                             ms.SetLength(0);
@@ -122,7 +124,7 @@ namespace ErnestAi.Host
                       .Append(_pitch.ToString("F2"));
             var key = keyBuilder.ToString();
             var hash = _hash.ComputeMd5(key);
-            Debug.WriteLine($"[Ann] Key gen -> phrase='{phrase}', voice='{_voice}', rate={_rate:F2}, pitch={_pitch:F2}, hash={hash}");
+            Console.WriteLine($"[Ann] Key gen -> phrase='{phrase}', voice='{_voice}', rate={_rate:F2}, pitch={_pitch:F2}, hash={hash}");
             return hash;
         }
 

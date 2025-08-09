@@ -14,6 +14,7 @@ namespace ErnestAi.Speech
     public class TextToSpeechService : ITextToSpeechService
     {
         private readonly SpeechSynthesizer _synthesizer;
+        private bool _sealed;
 
         /// <summary>
         /// Gets the name of the text-to-speech service provider
@@ -23,22 +24,26 @@ namespace ErnestAi.Speech
         /// <summary>
         /// Gets or sets the currently selected voice
         /// </summary>
-        public string CurrentVoice { get; set; }
+        private string _currentVoice;
+        public string CurrentVoice => _currentVoice;
 
         /// <summary>
         /// Gets or sets the speech rate
         /// </summary>
-        public float SpeechRate { get; set; } = 1.0f;
+        private float _speechRate = 1.0f;
+        public float SpeechRate => _speechRate;
 
         /// <summary>
         /// Gets or sets the speech pitch
         /// </summary>
-        public float SpeechPitch { get; set; } = 1.0f;
+        private float _speechPitch = 1.0f;
+        public float SpeechPitch => _speechPitch;
 
         /// <summary>
         /// Gets or sets the speech volume
         /// </summary>
-        public float SpeechVolume { get; set; } = 100.0f;
+        private float _speechVolume = 100.0f;
+        public float SpeechVolume => _speechVolume;
 
         /// <summary>
         /// Creates a new instance of the TextToSpeechService
@@ -56,20 +61,37 @@ namespace ErnestAi.Speech
                 {
                     var first = installed.First().VoiceInfo.Name;
                     _synthesizer.SelectVoice(first);
-                    CurrentVoice = _synthesizer.Voice?.Name;
+                    _currentVoice = _synthesizer.Voice?.Name;
                 }
                 else
                 {
                     // Fallback to hints, though on some systems this may still be the same as default
                     _synthesizer.SelectVoiceByHints(VoiceGender.NotSet, VoiceAge.NotSet);
-                    CurrentVoice = _synthesizer.Voice?.Name;
+                    _currentVoice = _synthesizer.Voice?.Name;
                 }
             }
             catch
             {
                 // If no voice is available, we'll handle this gracefully
-                CurrentVoice = null;
+                _currentVoice = null;
             }
+        }
+
+        /// <summary>
+        /// Initialize this service exactly once and seal parameters for the process lifetime.
+        /// Subsequent calls are no-ops.
+        /// </summary>
+        public void InitializeOnce(string? voice, float? rate, float? pitch)
+        {
+            if (_sealed) return;
+            if (!string.IsNullOrWhiteSpace(voice))
+            {
+                _currentVoice = voice;
+            }
+            if (rate.HasValue) _speechRate = rate.Value;
+            if (pitch.HasValue) _speechPitch = pitch.Value;
+            _sealed = true;
+            Console.WriteLine($"[TTS] Initialized (voice='{_currentVoice ?? "<none>"}', rate={_speechRate:F2}, pitch={_speechPitch:F2})");
         }
 
         /// <summary>
@@ -155,7 +177,7 @@ namespace ErnestAi.Speech
                         if (!string.IsNullOrEmpty(match))
                         {
                             _synthesizer.SelectVoice(match);
-                            CurrentVoice = match;
+                            _currentVoice = match;
                         }
                         else
                         {
@@ -164,7 +186,7 @@ namespace ErnestAi.Speech
                             if (!string.IsNullOrEmpty(first))
                             {
                                 _synthesizer.SelectVoice(first);
-                                CurrentVoice = first;
+                                _currentVoice = first;
                                 Console.WriteLine($"[TTS] Falling back to voice '{first}'.");
                             }
                         }
@@ -177,10 +199,10 @@ namespace ErnestAi.Speech
             }
 
             // Set rate (-10 to 10)
-            _synthesizer.Rate = (int)Math.Clamp((SpeechRate - 1) * 10, -10, 10);
+            _synthesizer.Rate = (int)Math.Clamp(((_speechRate) - 1) * 10, -10, 10);
             
             // Set volume (0 to 100)
-            _synthesizer.Volume = (int)Math.Clamp(SpeechVolume, 0, 100);
+            _synthesizer.Volume = (int)Math.Clamp(_speechVolume, 0, 100);
         }
     }
 }
