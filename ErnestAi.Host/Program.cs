@@ -15,6 +15,10 @@ namespace ErnestAi.Host
 {
     internal class Program
     {
+        /// <summary>
+        /// Application entry point.
+        /// Performs configuration load, language model selection, DI composition, and starts the runtime loop.
+        /// </summary>
         static async Task Main(string[] args)
         {
             Console.WriteLine("ErnestAi - Local AI Home Assistant");
@@ -129,6 +133,9 @@ namespace ErnestAi.Host
             return null;
         }
         
+        /// <summary>
+        /// Composes the runtime: initializes TTS/announcements, subscribes events, wires handlers, and starts listening.
+        /// </summary>
         private static async Task RunErnestAiAsync(ServiceProvider serviceProvider, AppConfig config)
         {
             Console.WriteLine("Starting ErnestAi...");
@@ -142,184 +149,31 @@ namespace ErnestAi.Host
             var warmupOrchestrator = serviceProvider.GetService<WarmupOrchestrator>();
             var announcement = serviceProvider.GetService<AnnouncementService>();
 
-            // List available TTS voices and attempt to select configured PreferredVoice
-            string? selectedVoice = null;
-            try
-            {
-                var voices = (await ttsService.GetAvailableVoicesAsync()).ToList();
-                Console.WriteLine("[TTS] Available voices:");
-                foreach (var v in voices)
-                {
-                    Console.WriteLine($"  - {v}");
-                }
+            // Initialize and seal TTS for process lifetime
+            await InitializeAndSealTtsAsync(ttsService, config);
 
-                var preferred = config.TextToSpeech?.PreferredVoice;
-                if (!string.IsNullOrWhiteSpace(preferred))
-                {
-                    var match = voices.FirstOrDefault(v => string.Equals(v, preferred, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(match))
-                    {
-                        selectedVoice = match;
-                        Console.WriteLine($"[TTS] Selected voice: '{match}'");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[TTS] PreferredVoice '{preferred}' not found. Using current voice '{ttsService.CurrentVoice ?? "<none>"}'.");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"[TTS] No PreferredVoice configured. Using current voice '{ttsService.CurrentVoice ?? "<none>"}'.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[TTS] Failed to enumerate/select voices: {ex.Message}");
-            }
-
-            // Seal TTS settings for process lifetime (immutable pattern)
-            if (ttsService is TextToSpeechService ttsConcrete)
-            {
-                // Use selectedVoice if found; otherwise keep existing defaults
-                var voiceToUse = selectedVoice ?? ttsService.CurrentVoice;
-                ttsConcrete.InitializeOnce(voiceToUse, ttsService.SpeechRate, ttsService.SpeechPitch);
-            }
-
-            // Initialize announcement service with key policy and cache dir, then optionally preload phrase
-            if (announcement != null)
-            {
-                try
-                {
-                    var voice = ttsService.CurrentVoice ?? string.Empty;
-                    var rate = ttsService.SpeechRate;
-                    var pitch = ttsService.SpeechPitch;
-                    var cacheDir = config.Acknowledgement?.CacheDirectory;
-                    await announcement.InitializeAsync(voice, rate, pitch, cacheDir);
-
-                    if (config.Acknowledgement?.Enabled == true && !string.IsNullOrWhiteSpace(config.Acknowledgement.Phrase))
-                    {
-                        await announcement.PreloadAsync(config.Acknowledgement.Phrase);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[Ann] Initialization failed: {ex.Message}");
-                }
-            }
+            // Initialize announcement service and optionally preload phrase
+            await InitializeAnnouncementsAsync(announcement, ttsService, config);
             
             // Ensure wake word is set correctly from config
             wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
 
             // Informational: list available models for the connected provider and show the selected one
-            try
-            {
-                var models = await llmService.GetAvailableModelsAsync();
-                Console.WriteLine("[LLM] Available models:");
-                foreach (var m in models)
-                {
-                    Console.WriteLine($" - {m}");
-                }
-                Console.WriteLine($"[LLM] Selected model: {llmService.CurrentModel} (provider={llmService.ProviderName})");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[LLM] Failed to retrieve available models: {ex.Message}");
-            }
+            await ListAvailableModelsAsync(llmService);
             
             // Subscribe to transcription events
-            if (sttService is SpeechToTextService speechToTextService)
-            {
-                speechToTextService.TextTranscribed += (sender, e) =>
-                {
-                    // This event handler will be called whenever text is transcribed
-                    // You can use this to update a UI, log to a file, etc.
-                    
-                    // Example: Log to a file
-                    try
-                    {
-                        File.AppendAllText("transcription_log.txt", 
-                            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e.StartTime:F1}s-{e.EndTime:F1}s: {e.Text}\n");
-                    }
-                    catch (Exception ex)
-                    {
-                        // Silently handle file access errors
-                        Console.WriteLine($"Error logging transcription: {ex.Message}");
-                    }
-                    
-                    // Example: You could send this to a UI, analytics service, etc.
-                };
-            }
+            SubscribeToTranscriptions(sttService);
             
             // Setup wake word detection handler
             var cts = new CancellationTokenSource();
 
             // Start model warmup orchestrator (if enabled)
-            if (warmupOrchestrator != null)
-            {
-                await warmupOrchestrator.StartAsync(config, cts.Token);
-            }
+            await StartWarmupAsync(warmupOrchestrator, config, cts.Token);
             
             wakeWordDetector.WakeWordDetected += async (sender, e) =>
-            {
-                Console.WriteLine($"Wake word detected: {e.DetectedText}");
-                
-                try
-                {
-                    // Play announcement (lets the user know we're ready)
-                    if (announcement != null && config.Acknowledgement?.Enabled == true && !string.IsNullOrWhiteSpace(config.Acknowledgement.Phrase))
-                    {
-                        await announcement.PlayAsync(config.Acknowledgement.Phrase);
-                        var pauseMs = config.Acknowledgement?.PauseAfterMs ?? 0;
-                        if (pauseMs > 0)
-                        {
-                            await Task.Delay(pauseMs);
-                        }
-                    }
+                await HandleWakeWordAsync(announcement, config, audioProcessor, sttService, llmService, ttsService, e.DetectedText);
 
-                    // Start recording
-                    Console.WriteLine("Recording...");
-                    await audioProcessor.StartRecordingAsync();
-                    
-                    // Record for 5 seconds
-                    await Task.Delay(5000);
-                    
-                    // Stop recording and get audio
-                    Console.WriteLine("Processing...");
-                    var audioStream = await audioProcessor.StopRecordingAsync();
-                    
-                    // Transcribe audio
-                    var transcription = await sttService.TranscribeAsync(audioStream);
-                    Console.WriteLine($"You said: {transcription}");
-                    
-                    // Get response from LLM
-                    Console.WriteLine("Thinking...");
-                    var response = await llmService.GetResponseAsync(transcription);
-                    Console.WriteLine($"AI: {response}");
-                    
-                    // Speak response
-                    await ttsService.SpeakToDefaultOutputAsync(response);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error processing request: {ex.Message}");
-                }
-            };
-            
-            // Start listening for wake word
-            Console.WriteLine($"Listening for wake word: \"{wakeWordDetector.WakeWord}\"...");
-            await wakeWordDetector.StartListeningAsync(cts.Token);
-            
-            // Wait for user to exit
-            Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
-            
-            // Clean up
-            await wakeWordDetector.StopListeningAsync();
-            cts.Cancel();
-            if (warmupOrchestrator != null)
-            {
-                await warmupOrchestrator.StopAsync();
-            }
+            await StartListeningAndWaitForExitAsync(wakeWordDetector, cts, warmupOrchestrator);
         }
 
         private static void PromptAndExit()
@@ -365,6 +219,213 @@ namespace ErnestAi.Host
 
             // Warmup orchestrator
             services.AddSingleton<WarmupOrchestrator>();
+        }
+
+        /// <summary>
+        /// Handles the full prompt/response round-trip triggered by a wake word.
+        /// Plays an announcement, records audio, transcribes, queries LLM, and speaks the response.
+        /// </summary>
+        private static async Task HandleWakeWordAsync(
+            AnnouncementService? announcement,
+            AppConfig config,
+            IAudioProcessor audioProcessor,
+            ISpeechToTextService sttService,
+            ILanguageModelService llmService,
+            ITextToSpeechService ttsService,
+            string? detectedText)
+        {
+            Console.WriteLine($"Wake word detected: {detectedText}");
+
+            try
+            {
+                // Play announcement (lets the user know we're ready)
+                if (announcement != null && config.Acknowledgement?.Enabled == true && !string.IsNullOrWhiteSpace(config.Acknowledgement.Phrase))
+                {
+                    await announcement.PlayAsync(config.Acknowledgement.Phrase);
+                    var pauseMs = config.Acknowledgement?.PauseAfterMs ?? 0;
+                    if (pauseMs > 0)
+                    {
+                        await Task.Delay(pauseMs);
+                    }
+                }
+
+                // Start recording
+                Console.WriteLine("Recording...");
+                await audioProcessor.StartRecordingAsync();
+
+                // Record for 5 seconds
+                await Task.Delay(5000);
+
+                // Stop recording and get audio
+                Console.WriteLine("Processing...");
+                var audioStream = await audioProcessor.StopRecordingAsync();
+
+                // Transcribe audio
+                var transcription = await sttService.TranscribeAsync(audioStream);
+                Console.WriteLine($"You said: {transcription}");
+
+                // Get response from LLM
+                Console.WriteLine("Thinking...");
+                var response = await llmService.GetResponseAsync(transcription);
+                Console.WriteLine($"AI: {response}");
+
+                // Speak response
+                await ttsService.SpeakToDefaultOutputAsync(response);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error processing request: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Starts listening for the wake word and blocks until user presses a key, then performs orderly shutdown.
+        /// </summary>
+        private static async Task StartListeningAndWaitForExitAsync(
+            IWakeWordDetector wakeWordDetector,
+            CancellationTokenSource cts,
+            WarmupOrchestrator? warmupOrchestrator)
+        {
+            // Start listening for wake word
+            Console.WriteLine($"Listening for wake word: \"{wakeWordDetector.WakeWord}\"...");
+            await wakeWordDetector.StartListeningAsync(cts.Token);
+
+            // Wait for user to exit
+            Console.WriteLine("Press any key to exit...");
+            try { Console.ReadKey(); } catch { /* ignore */ }
+
+            // Clean up
+            await wakeWordDetector.StopListeningAsync();
+            cts.Cancel();
+            if (warmupOrchestrator != null)
+            {
+                await warmupOrchestrator.StopAsync();
+            }
+        }
+
+        /// <summary>
+        /// Enumerates available TTS voices, selects the preferred voice (if configured), and seals the TTS service
+        /// so its parameters remain immutable for the lifetime of the process.
+        /// </summary>
+        private static async Task InitializeAndSealTtsAsync(ITextToSpeechService ttsService, AppConfig config)
+        {
+            try
+            {
+                var voices = (await ttsService.GetAvailableVoicesAsync()).ToList();
+                Console.WriteLine("[TTS] Available voices:");
+                foreach (var v in voices)
+                {
+                    Console.WriteLine($"  - {v}");
+                }
+
+                string? selectedVoice = null;
+                var preferred = config.TextToSpeech?.PreferredVoice;
+                if (!string.IsNullOrWhiteSpace(preferred))
+                {
+                    selectedVoice = voices.FirstOrDefault(v => string.Equals(v, preferred, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(selectedVoice))
+                    {
+                        Console.WriteLine($"[TTS] Selected voice: '{selectedVoice}'");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[TTS] PreferredVoice '{preferred}' not found. Using current voice '{ttsService.CurrentVoice ?? "<none>"}'.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[TTS] No PreferredVoice configured. Using current voice '{ttsService.CurrentVoice ?? "<none>"}'.");
+                }
+
+                if (ttsService is TextToSpeechService ttsConcrete)
+                {
+                    var voiceToUse = selectedVoice ?? ttsService.CurrentVoice;
+                    ttsConcrete.InitializeOnce(voiceToUse, ttsService.SpeechRate, ttsService.SpeechPitch);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[TTS] Failed to enumerate/select voices: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Initializes the announcement subsystem and optionally preloads the configured phrase.
+        /// </summary>
+        private static async Task InitializeAnnouncementsAsync(AnnouncementService? announcement, ITextToSpeechService ttsService, AppConfig config)
+        {
+            if (announcement == null) return;
+            try
+            {
+                var voice = ttsService.CurrentVoice ?? string.Empty;
+                var rate = ttsService.SpeechRate;
+                var pitch = ttsService.SpeechPitch;
+                var cacheDir = config.Acknowledgement?.CacheDirectory;
+                await announcement.InitializeAsync(voice, rate, pitch, cacheDir);
+
+                if (config.Acknowledgement?.Enabled == true && !string.IsNullOrWhiteSpace(config.Acknowledgement.Phrase))
+                {
+                    await announcement.PreloadAsync(config.Acknowledgement.Phrase);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Ann] Initialization failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Lists available models from the connected provider and prints the selected one.
+        /// </summary>
+        private static async Task ListAvailableModelsAsync(ILanguageModelService llmService)
+        {
+            try
+            {
+                var models = await llmService.GetAvailableModelsAsync();
+                Console.WriteLine("[LLM] Available models:");
+                foreach (var m in models)
+                {
+                    Console.WriteLine($" - {m}");
+                }
+                Console.WriteLine($"[LLM] Selected model: {llmService.CurrentModel} (provider={llmService.ProviderName})");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LLM] Failed to retrieve available models: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to STT transcription events and logs transcriptions to a local file.
+        /// </summary>
+        private static void SubscribeToTranscriptions(ISpeechToTextService sttService)
+        {
+            if (sttService is SpeechToTextService speechToTextService)
+            {
+                speechToTextService.TextTranscribed += (sender, e) =>
+                {
+                    try
+                    {
+                        File.AppendAllText("transcription_log.txt",
+                            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e.StartTime:F1}s-{e.EndTime:F1}s: {e.Text}\n");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error logging transcription: {ex.Message}");
+                    }
+                };
+            }
+        }
+
+        /// <summary>
+        /// Starts the warmup orchestrator if it is registered/enabled.
+        /// </summary>
+        private static async Task StartWarmupAsync(WarmupOrchestrator? warmupOrchestrator, AppConfig config, CancellationToken token)
+        {
+            if (warmupOrchestrator != null)
+            {
+                await warmupOrchestrator.StartAsync(config, token);
+            }
         }
     }
 }
