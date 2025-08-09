@@ -13,17 +13,21 @@ This project is responsible for:
 
 ## Key Features
 - Integration with local language models via Ollama
-- Support for both synchronous and streaming responses
-- Context management for coherent conversations
-- Prompt engineering and optimization
-- Response parsing and processing
+- Non‑streaming responses with configurable output filtering (regex)
+- Prioritized model selection provided by Host at startup
+- Minimal warmup ping support for local providers
+- Basic prompt/response handling
 
 ## Implementation
-The project implements the `ILanguageModelService` interface from ErnestAi.Core, providing concrete implementations for language model interactions. It uses HTTP clients to communicate with local or remote language model APIs.
+Implements `ILanguageModelService` for Ollama. The service:
+
+- Uses non‑streaming generation and applies regex filters to remove non‑conversational markup from outputs.
+- Exposes `OutputFilters` (list of regex strings) set from configuration per selected model.
+- Returns available models from the provider for informational listing.
 
 ## Dependencies
-- ErnestAi.Core - For core interfaces
-- HTTP client libraries - For API communication
+- ErnestAi.Core — Core interfaces
+- System.Net.Http — HTTP client for provider APIs
 
 ## Usage
 This library is used by other ErnestAi components that need to interact with language models, such as the main conversation flow and tool execution components.

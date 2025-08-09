@@ -9,17 +9,16 @@ This project is responsible for:
 - Converting text to spoken audio (speech synthesis)
 - Managing speech models and voices
 - Handling different languages and accents
-- Providing both file-based and streaming speech processing
+-- Providing speech processing services used by the Host
 
 ## Key Features
 - High-quality speech recognition using Whisper models
 - Natural-sounding text-to-speech synthesis
-- Support for multiple languages and voices
-- Real-time streaming transcription
-- Speech enhancement and noise reduction
+- Support for voices available via System.Speech
+- Optional console transcription output (configurable)
 
 ## Implementation
-The project implements the `ISpeechToTextService` and `ITextToSpeechService` interfaces from ErnestAi.Core, providing concrete implementations for speech processing functionality. It uses Whisper.net for speech recognition and System.Speech for text-to-speech synthesis.
+Implements `ISpeechToTextService` and `ITextToSpeechService` from ErnestAi.Core. Uses Whisper.net for local STT and System.Speech for TTS. Transcription events can be surfaced to the Host and optionally logged to console per configuration.
 
 ## Dependencies
 - ErnestAi.Core - For core interfaces

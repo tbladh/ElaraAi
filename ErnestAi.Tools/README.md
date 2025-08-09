@@ -1,33 +1,25 @@
 # ErnestAi.Tools
 
 ## Overview
-ErnestAi.Tools provides implementations for executing tools and commands requested by the user or determined by the AI assistant. It serves as a bridge between natural language requests and actual system functionality.
+ErnestAi.Tools defines the surface for executing local tools/capabilities requested by the assistant.
 
 ## Purpose
 This project is responsible for:
-- Executing tools and commands
-- Managing tool discovery and registration
-- Validating tool parameters
-- Processing tool results
-- Providing a standardized tool execution framework
+- Providing a standardized interface for tool execution
+- Hosting minimal, local tools in future iterations
 
-## Key Features
-- Unified tool execution interface
-- Built-in system tools (date/time, system info)
-- File system operations
-- Web access capabilities
-- Media control functions
-- Home automation integrations
+## Current Status
+- Interface-first. Concrete tools are not yet implemented.
+- Next steps focus on adding a small set of local tools behind the common interface.
 
 ## Implementation
-The project implements the `IToolExecutor` interface from ErnestAi.Core, providing concrete implementations for tool execution functionality. It manages the discovery, selection, and execution of tools, handling parameter validation and error handling.
+Implements (or will implement) `IToolExecutor` from ErnestAi.Core. Concrete tools will be added incrementally.
 
 ## Dependencies
-- ErnestAi.Core - For core interfaces
-- System libraries for file access, network operations, etc.
+- ErnestAi.Core — For core interfaces
 
 ## Usage
-This library is used by other ErnestAi components that need to execute tools or commands, such as the main conversation flow and plugin system.
+Used by the Host when invoking capabilities via `IToolExecutor`.
 
 ## Documentation
 For more detailed information about the architecture and design decisions, see the [INFO.ai](./INFO.ai) file.

@@ -1,51 +1,82 @@
-# ErnestAi - Local AI Home Assistant
+# ErnestAi — Local, Private AI Home Assistant
 
-## Project Vision
+ErnestAi is a self-contained, fully local AI personality for your home. It prioritizes privacy, simplicity, and extensibility. Core features run completely offline and are modular so you can swap implementations as the project grows.
 
-ErnestAi is a self-contained, fully local AI personality designed for the home environment. The core philosophy centers around privacy, reliability, and extensibility - creating an AI assistant that operates independently of cloud services while maintaining the flexibility to integrate with external services when desired by the user.
+## Getting Started (Under 20 Minutes)
 
-The project embodies a "local-first" approach where all core functionality works offline, ensuring your conversations and data remain private and the system continues to function even without internet connectivity.
+Follow these steps to run locally with a model on Ollama.
 
-## Current Implementation
+### 1) Install prerequisites
 
-### Architecture Overview
+- .NET 8 SDK: https://dotnet.microsoft.com/en-us/download
+- Ollama: https://ollama.com
+- A microphone and speakers/headphones
 
-The current implementation provides a working prototype that demonstrates the core pipeline:
+After installing Ollama, start the service. On Windows it typically runs as a background service and listens on `http://127.0.0.1:11434`.
 
+### 2) Pull or run a model in Ollama
+
+Open a terminal and pull a model. You can replace the tag to your preference.
+
+```bash
+ollama pull llama3:latest
+# or simply: ollama run llama3:latest
 ```
-Wake Word Detection → Audio Recording → Speech-to-Text → LLM Processing → Text-to-Speech → Audio Output
+
+If you prefer another model, adapt the `ModelName` accordingly and ensure it’s available in Ollama (`ollama list`).
+
+### 3) Configure ErnestAi
+
+Edit `ErnestAi.Host/appsettings.json`:
+
+- Set your wake word and speech model URLs under `WakeWord` and `SpeechToText`.
+- Under `LanguageModels`, provide one or more candidates. Example:
+
+```json
+{
+  "LanguageModels": [
+    {
+      "Name": "Llama3-Ollama",
+      "Provider": "ollama",
+      "ServiceUrl": "http://127.0.0.1:11434",
+      "ModelName": "llama3:latest",
+      "SystemPrompt": "You are Ernest, a helpful AI assistant.",
+      "Priority": 1
+    }
+  ]
+}
 ```
 
-### Key Components
+Notes:
+- You may list multiple models; the app picks the first responsive by ascending `Priority`.
+- `Filter` is optional and removes matching text via regex. For thinking models, this cleans non-conversational markup.
 
-1. **Wake Word Detection** (`WakeWordDetector.cs`)
-   - Continuous audio monitoring using NAudio
-   - Whisper.net-based transcription for wake word recognition
-   - Configurable wake word ("ernest" by default)
-   - Automatic model downloading and caching
+### 4) Build and run
 
-2. **Speech Processing Pipeline** (`Program.cs`)
-   - Audio recording with configurable duration
-   - Local Whisper model for speech-to-text conversion
-   - Integration with local Ollama LLM service
-   - System.Speech for text-to-speech output
+From the repo root:
 
-3. **Dependencies**
-   - **NAudio**: Cross-platform audio capture and playback
-   - **Whisper.net**: Local speech recognition
-   - **System.Speech**: Text-to-speech synthesis
-   - **Ollama Integration**: Local LLM inference
+```bash
+dotnet build ErnestAi.Modular.sln
+dotnet run --project ErnestAi.Host
+```
 
-### Current Workflow
+The app validates configuration at startup, connects to the selected provider, prints available models, and begins listening for the wake word.
 
-1. System continuously listens for the wake word "ernest"
-2. Upon detection, prompts user to speak (currently requires manual trigger)
-3. Records 5 seconds of audio
-4. Transcribes audio using local Whisper model
-5. Sends transcription to local Ollama instance
-6. Speaks the AI response using system TTS
+If you see a message about missing models, pull the model in Ollama, update `appsettings.json` if needed, and run again.
 
-## Future Architecture Vision
+## Current Status (Modular Solution)
+
+Minimal end‑to‑end pipeline implemented across modular projects:
+
+Wake Word → Audio Recording → STT (Whisper) → LLM (Ollama) → TTS → Audio Out
+
+Key notes:
+- Configuration is strict and explicit: no code defaults. Missing/invalid config fails fast.
+- Language models are configured as a prioritized list. The app selects the first responsive entry on startup.
+- Warmup pings are minimal and configurable per provider. Purely local providers only.
+- Output filtering (regex) removes non-conversational markup from LLM responses (e.g., DeepSeek `<think>…</think>` tags).
+
+## Architecture Overview
 
 ### Target Pipeline
 
@@ -57,152 +88,38 @@ Dynamic STT → Context Management → Multi-Model LLM → Tool Execution →
 Contextual TTS → Audio Output
 ```
 
-### Planned Architectural Components
-
-#### 1. Audio Processing Layer
-- **Streaming Wake Word Detection**: Continuous monitoring without buffering delays
-- **Voice Activity Detection (VAD)**: Automatic detection of speech start/end
-- **Audio Buffer Management**: Efficient audio buffer management and model caching
-
-#### 2. Speech Recognition Layer
-- **Streaming STT**: Real-time transcription as user speaks
-- **Multi-Model STT**: Support for various Whisper models and alternatives
-- **Language Detection**: Only English is supported
-- **Audio Buffer Management**: Efficient audio buffer management and model caching
-
-#### 3. Intelligence Layer
-- **Multi-Model Support**: 
-  - Local models (Ollama, GGML, ONNX)
-  - Cloud services (OpenAI, Anthropic, Google) with user permission
-  - Specialized models for different tasks
-- **Context Management**: Conversation history and session state
-- **Response Generation**: Contextually aware and personality-consistent responses
-
-#### 4. Tool Integration Layer
-- **Plugin Architecture**: Extensible tool system
-- **Home Automation**: Smart device control in the future
-- **Information Services**: Weather, news, calendar integration in the future
-- **Productivity Tools**: Task management, reminders, note-taking in the future
-- **Security Framework**: Permission-based tool access in the future
-
-#### 5. Output Layer
-- **Contextual TTS**: Emotion and context-aware speech synthesis in the future
-- **Multi-Modal Output**: Text, audio, and visual responses in the future
-- **Streaming Audio**: Real-time audio generation and playback in the future
-- **Response Formatting**: Structured output for different contexts in the future
-
-### Dependency Injection Architecture
-
-The future architecture will leverage dependency injection for modularity and testability:
-
-```csharp
-// Core Services
-IWakeWordDetector
-IAudioProcessor
-ISpeechToTextService
-ILanguageModelService
-ITextToSpeechService
-IToolExecutor
-
-// Configuration Services
-IAudioConfiguration
-IModelConfiguration
-IPersonalityConfiguration
-
-// Storage Services
-IConversationHistory
-IUserPreferences
-IModelCache
-```
-
-## Potential Future Directions
-
-### Planned Path: Modular Plugin Architecture
-
-**Focus**: Maximum extensibility and community contribution
-
-**Key Features**:
-- Plugin-based architecture with hot-swappable components
-- Standardized interfaces for STT, LLM, TTS, and tool providers
-- Plugin marketplace and discovery system
-
-**Project Structure**:
-```
-ErnestAi.Core/           # Core interfaces and base classes
-ErnestAi.Audio/          # Audio processing components
-ErnestAi.Speech/         # STT/TTS abstractions
-ErnestAi.Intelligence/   # LLM and reasoning components
-ErnestAi.Tools/          # Tool execution framework
-ErnestAi.Plugins/        # Plugin management system
-ErnestAi.Host/           # Main application host
-ErnestAi.Configuration/  # Settings and preferences
-```
-
-**Benefits**:
-- Highly extensible and customizable
-- Community-driven development
-- Easy to add new models and services
-- Clear separation of concerns
-
-**Challenges**:
-- Complex architecture requiring careful interface design
-- Plugin compatibility and versioning
-- Performance overhead from abstraction layers
-
-## Technical Considerations
-
-### Dependency Injection Implementation
-
-The project will adopt Microsoft.Extensions.DependencyInjection for service management:
-
-```csharp
-// Service Registration
-services.AddSingleton<IAudioConfiguration, AudioConfiguration>();
-services.AddSingleton<IWakeWordDetector, WhisperWakeWordDetector>();
-services.AddScoped<ISpeechToTextService, WhisperSttService>();
-services.AddScoped<ILanguageModelService, OllamaService>();
-services.AddTransient<IToolExecutor, PluginToolExecutor>();
-
-// Configuration-based service selection
-services.AddSingleton<ILanguageModelService>(provider =>
-{
-    var config = provider.GetService<IModelConfiguration>();
-    return config.PreferredProvider switch
-    {
-        "ollama" => new OllamaService(config),
-        "openai" => new OpenAiService(config),
-        _ => new OllamaService(config)
-    };
-});
-```
-
-### Solution Structure Evolution
-
-The current single-project structure will evolve into a multi-project solution:
+### Solution Structure (Brief)
 
 ```
-ErnestAi.sln
-├── src/
-│   ├── ErnestAi.Core/              # Core interfaces and models
-│   ├── ErnestAi.Audio/             # Audio processing
-│   ├── ErnestAi.Speech/            # STT/TTS services
-│   ├── ErnestAi.Intelligence/      # LLM services
-│   ├── ErnestAi.Tools/             # Tool execution
-│   ├── ErnestAi.Configuration/     # Settings management
-│   └── ErnestAi.Host/              # Main application
-├── plugins/
-│   ├── ErnestAi.Plugins.Weather/   # Weather plugin
-│   ├── ErnestAi.Plugins.Calendar/  # Calendar plugin
-│   └── ErnestAi.Plugins.SmartHome/ # Smart home plugin
-├── tests/
-│   ├── ErnestAi.Core.Tests/
-│   ├── ErnestAi.Audio.Tests/
-│   └── ErnestAi.Integration.Tests/
-└── docs/
-    ├── architecture.md
-    ├── plugin-development.md
-    └── deployment.md
+ErnestAi.Modular.sln
+├── ErnestAi.Core/           # Core interfaces and contracts
+├── ErnestAi.Audio/          # Audio capture/recording
+├── ErnestAi.Speech/         # Whisper-based STT and TTS
+├── ErnestAi.Intelligence/   # LLM services (Ollama)
+├── ErnestAi.Tools/          # Tooling stubs
+├── ErnestAi.Plugins/        # Plugin stubs
+├── ErnestAi.Configuration/  # Strongly-typed config
+└── ErnestAi.Host/           # Composition root (main app)
 ```
+
+### Composition
+The host wires the interfaces in `ErnestAi.Core/` to concrete implementations and selects an LLM from `LanguageModels[]` (by priority and provider availability) on startup.
+
+## Next Steps
+
+- Improve natural conversation experience (latency, pacing, flow)
+- Integrate additional providers (e.g., ChatGPT) via the same configuration/DI pattern
+- Add basic tool use (invoking local capabilities through a stable interface)
+
+## Technical Notes
+
+- Composition via standard .NET DI; concrete services wired in `ErnestAi.Host`.
+- Language model selection is configuration-driven and validated on startup.
+
+### Notes
+- Non-streaming responses (regex filters applied to output)
+- Optional warmup pings for local providers
+- Explicit configuration with validation (no code defaults)
 
 ### Performance and Scalability
 
@@ -218,33 +135,68 @@ ErnestAi.sln
 - **Permission System**: Granular permissions for tool access and data usage
 - **Audit Logging**: Comprehensive logging of system actions and data access
 
-## Getting Started
+## Getting Started (Under 20 Minutes)
 
-### Prerequisites
+Follow these steps to run locally with a model on Ollama.
 
-- .NET 8.0 or later
-- Ollama installed and running locally
-- Audio input/output devices
+### 1) Install prerequisites
 
-### Quick Start
+- .NET 8 SDK: https://dotnet.microsoft.com/en-us/download
+- Ollama: https://ollama.com
+- A microphone and speakers/headphones
 
-1. Clone the repository
-2. Ensure Ollama is running with a compatible model
-3. Build and run the application:
-   ```bash
-   dotnet build
-   dotnet run --project ErnestAi
-   ```
-4. Say "ernest" to trigger the wake word detection
-5. Follow the prompts to interact with the assistant
+After installing Ollama, start the service. On Windows it typically runs as a background service and listens on `http://127.0.0.1:11434`.
 
-### Configuration
+### 2) Pull or run a model in Ollama
 
-The system will support configuration through:
-- `appsettings.json` for application settings
-- Environment variables for sensitive configuration
-- User preferences stored locally
-- Plugin-specific configuration files
+Open a terminal and pull a model. You can replace the tag to your preference.
+
+```bash
+ollama pull deepseek-7b-ex:latest
+# or simply: ollama run deepseek-7b-ex:latest
+```
+
+If you prefer another model, adapt the `ModelName` accordingly and ensure it’s available in Ollama (`ollama list`).
+
+### 3) Configure ErnestAi
+
+Edit `ErnestAi.Host/appsettings.json`:
+
+- Set your wake word and speech model URLs under `WakeWord` and `SpeechToText`.
+- Under `LanguageModels`, provide one or more candidates. Example:
+
+```json
+{
+  "LanguageModels": [
+    {
+      "Name": "DeepSeek-7B-Ollama",
+      "Provider": "ollama",
+      "ServiceUrl": "http://127.0.0.1:11434",
+      "ModelName": "deepseek-7b-ex:latest",
+      "SystemPrompt": "You are Ernest, a helpful AI assistant.",
+      "Priority": 1,
+      "Filter": ["<think>.*?</think>"]
+    }
+  ]
+}
+```
+
+Notes:
+- You may list multiple models; the app picks the first responsive by ascending `Priority`.
+- `Filter` is optional and removes matching text via regex. For thinking models, this cleans non-conversational markup.
+
+### 4) Build and run
+
+Use your IDE or CLI. From the repo root:
+
+```bash
+dotnet build ErnestAi.Modular.sln
+dotnet run --project ErnestAi.Host
+```
+
+The app validates configuration at startup, connects to the selected provider, prints available models, and begins listening for the wake word.
+
+If you see a message about missing models, pull the model in Ollama, update `appsettings.json` if needed, and run again.
 
 ## Contributing
 
@@ -258,27 +210,25 @@ ErnestAi follows the development philosophy outlined in `INFO.ai`:
 ## Roadmap
 
 ### Phase 1: Foundation (Current)
-- [x] Basic wake word detection
-- [x] Local STT with Whisper
-- [x] Ollama LLM integration
-- [x] Basic TTS output
+- [x] Modular multi-project solution
+- [x] Wake word → record → STT → LLM → TTS pipeline
+- [x] Strict config with validation (no defaults)
+- [x] Prioritized multi-provider LLM selection (Ollama)
+- [x] Minimal warmup orchestrator
+- [x] Output filters for LLM responses
 
-### Phase 2: Streaming and Modularity
-- [ ] Streaming audio processing
+### Phase 2: Audio/UX Improvements
 - [ ] Voice activity detection
-- [ ] Dependency injection framework
-- [ ] Multi-project solution structure
-- [ ] Configuration system
+- [ ] Adjustable recording and response flow
+- [ ] Better logging and diagnostics
 
 ### Phase 3: Extensibility
 - [ ] Plugin architecture
-- [ ] Multi-model support
-- [ ] Tool integration framework
-- [ ] Web-based configuration interface
+- [ ] Tool execution framework
+- [ ] Additional LLM providers
 
 ### Phase 4: Intelligence
-- [ ] Conversation memory
-- [ ] Context management
+- [ ] Conversation memory and context
 - [ ] Personality system
 - [ ] Learning and adaptation
 
