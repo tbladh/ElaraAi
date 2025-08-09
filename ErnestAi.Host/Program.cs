@@ -92,14 +92,28 @@ namespace ErnestAi.Host
                     }
 
                     // Quick ping to ensure responsiveness
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                    if (svc is OllamaLanguageModelService ollama)
+                    // Warmup the selected provider with a generous timeout to accommodate initial model load
+                    async Task WarmAsync(int timeoutSeconds)
                     {
-                        await ollama.BarePromptAsync(ErnestAi.Core.Globals.WarmupPrompt, cts.Token);
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+                        if (svc is OllamaLanguageModelService ollama)
+                        {
+                            await ollama.BarePromptAsync(Core.Globals.WarmupPrompt, cts.Token);
+                        }
+                        else
+                        {
+                            await svc.GetResponseAsync(Core.Globals.WarmupPrompt, cts.Token);
+                        }
                     }
-                    else
+
+                    try
                     {
-                        await svc.GetResponseAsync(ErnestAi.Core.Globals.WarmupPrompt, cts.Token);
+                        await WarmAsync(45);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[LM] Warmup attempt 1 failed for {lm.Name}: {ex.Message}. Retrying...");
+                        await WarmAsync(90);
                     }
 
                     Console.WriteLine($"[LM] Selected: {lm.Name} (provider={lm.Provider}, model={lm.ModelName})");

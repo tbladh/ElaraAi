@@ -19,6 +19,7 @@ namespace ErnestAi.Intelligence
     {
         private readonly HttpClient _httpClient;
         private readonly string _baseUrl;
+        private readonly SemaphoreSlim _generateLock = new(1, 1);
 
         /// <summary>
         /// Gets or sets the currently selected model
@@ -92,11 +93,19 @@ namespace ErnestAi.Intelligence
 
             if (!stream)
             {
-                var resp = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
-                resp.EnsureSuccessStatusCode();
-                var result = await resp.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cancellationToken: cancellationToken);
-                var text = result?.Response ?? string.Empty;
-                return ApplyFilters(text);
+                await _generateLock.WaitAsync(cancellationToken);
+                try
+                {
+                    var resp = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
+                    resp.EnsureSuccessStatusCode();
+                    var result = await resp.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cancellationToken: cancellationToken);
+                    var text = result?.Response ?? string.Empty;
+                    return ApplyFilters(text);
+                }
+                finally
+                {
+                    _generateLock.Release();
+                }
             }
 
             // Streaming is handled by GetStreamingResponseAsync; this method shouldn't be called with stream=true

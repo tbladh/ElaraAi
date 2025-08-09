@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using ErnestAi.Audio;
@@ -120,7 +121,9 @@ namespace ErnestAi.Host
                       .Append(_rate.ToString("F2")).Append("|")
                       .Append(_pitch.ToString("F2"));
             var key = keyBuilder.ToString();
-            return _hash.ComputeMd5(key);
+            var hash = _hash.ComputeMd5(key);
+            Debug.WriteLine($"[Ann] Key gen -> phrase='{phrase}', voice='{_voice}', rate={_rate:F2}, pitch={_pitch:F2}, hash={hash}");
+            return hash;
         }
 
         private string MapToPath(string keyHash)
