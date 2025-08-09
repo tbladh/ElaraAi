@@ -3,6 +3,7 @@ using ErnestAi.Configuration;
 using ErnestAi.Core.Interfaces;
 using ErnestAi.Intelligence;
 using ErnestAi.Speech;
+using ErnestAi.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
@@ -43,7 +44,21 @@ namespace ErnestAi.Host
             ConfigureServices(services, config, selectedLlm);
             
             var serviceProvider = services.BuildServiceProvider();
-            
+
+            // Initialize acknowledgement cache (if enabled)
+            try
+            {
+                var ack = serviceProvider.GetService<AcknowledgementService>();
+                if (ack != null)
+                {
+                    await ack.InitializeAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Ack] Initialization failed: {ex.Message}");
+            }
+
             // Initialize and start the application components
             await RunErnestAiAsync(serviceProvider, config);
         }
@@ -120,6 +135,7 @@ namespace ErnestAi.Host
             var llmService = serviceProvider.GetRequiredService<ILanguageModelService>();
             var ttsService = serviceProvider.GetRequiredService<ITextToSpeechService>();
             var warmupOrchestrator = serviceProvider.GetService<WarmupOrchestrator>();
+            var acknowledgement = serviceProvider.GetService<AcknowledgementService>();
             
             // Ensure wake word is set correctly from config
             wakeWordDetector.WakeWord = config.WakeWord.WakeWord.ToLower();
@@ -179,6 +195,17 @@ namespace ErnestAi.Host
                 
                 try
                 {
+                    // Play acknowledgement (lets the user know we're ready)
+                    if (acknowledgement != null && acknowledgement.Enabled)
+                    {
+                        await acknowledgement.PlayAsync();
+                        var pauseMs = config.Acknowledgement?.PauseAfterMs ?? 0;
+                        if (pauseMs > 0)
+                        {
+                            await Task.Delay(pauseMs);
+                        }
+                    }
+
                     // Start recording
                     Console.WriteLine("Recording...");
                     await audioProcessor.StartRecordingAsync();
@@ -259,6 +286,12 @@ namespace ErnestAi.Host
                 
             services.AddTransient<ITextToSpeechService>(provider => 
                 new TextToSpeechService());
+
+            // Utilities and acknowledgement
+            services.AddSingleton<IAudioPlayer, AudioPlayer>();
+            services.AddSingleton<ICacheService, FileCacheService>();
+            services.AddSingleton<IContentHashProvider, Md5HashProvider>();
+            services.AddSingleton<AcknowledgementService>();
 
             // Warmup orchestrator
             services.AddSingleton<WarmupOrchestrator>();

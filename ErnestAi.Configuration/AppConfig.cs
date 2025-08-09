@@ -41,6 +41,11 @@ namespace ErnestAi.Configuration
         public WarmupConfig Warmup { get; set; } = new WarmupConfig();
         
         /// <summary>
+        /// Acknowledgement word/phrase configuration
+        /// </summary>
+        public AcknowledgementConfig Acknowledgement { get; set; } = new AcknowledgementConfig();
+        
+        /// <summary>
         /// Loads configuration from the specified file
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown when configuration file is missing or invalid</exception>
@@ -50,7 +55,7 @@ namespace ErnestAi.Configuration
             {
                 throw new InvalidOperationException($"Configuration file '{filePath}' not found. Please create a valid configuration file.");
             }
-            
+
             using var stream = File.OpenRead(filePath);
             var config = await JsonSerializer.DeserializeAsync<AppConfig>(stream) 
                 ?? throw new InvalidOperationException($"Failed to deserialize configuration from '{filePath}'.");
@@ -133,6 +138,19 @@ namespace ErnestAi.Configuration
             if (string.IsNullOrWhiteSpace(config.TextToSpeech?.PreferredVoice))
             {
                 throw new InvalidOperationException($"Preferred voice for text-to-speech is not configured in '{filePath}'.");
+            }
+
+            // Validate acknowledgement configuration
+            if (config.Acknowledgement != null && config.Acknowledgement.Enabled)
+            {
+                if (string.IsNullOrWhiteSpace(config.Acknowledgement.Phrase))
+                {
+                    throw new InvalidOperationException($"Acknowledgement.Phrase must be set when acknowledgement is enabled in '{filePath}'.");
+                }
+                if (config.Acknowledgement.PauseAfterMs < 0)
+                {
+                    throw new InvalidOperationException($"Acknowledgement.PauseAfterMs must be >= 0 in '{filePath}'.");
+                }
             }
         }
     }
@@ -287,5 +305,31 @@ namespace ErnestAi.Configuration
         /// Optional interval (in seconds); if null or 0, uses DefaultIntervalSeconds
         /// </summary>
         public int? IntervalSeconds { get; set; }
+    }
+
+    /// <summary>
+    /// Configuration for acknowledgement playback
+    /// </summary>
+    public class AcknowledgementConfig
+    {
+        /// <summary>
+        /// Enables or disables acknowledgement playback on wake
+        /// </summary>
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>
+        /// The acknowledgement word or phrase (e.g., "Yes")
+        /// </summary>
+        public string Phrase { get; set; } = "Yes";
+
+        /// <summary>
+        /// Optional cache directory for generated audio files
+        /// </summary>
+        public string? CacheDirectory { get; set; } = null;
+
+        /// <summary>
+        /// Milliseconds to pause after playback before recording starts
+        /// </summary>
+        public int PauseAfterMs { get; set; } = 500;
     }
 }
