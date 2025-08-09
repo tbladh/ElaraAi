@@ -23,6 +23,7 @@ namespace ErnestAi.Host
         {
             Console.WriteLine("ErnestAi - Local AI Home Assistant");
             Console.WriteLine("----------------------------------");
+            ConfigureGlobalExceptionHandling();
             
             // Load configuration
             Console.WriteLine("Loading configuration...");
@@ -161,8 +162,7 @@ namespace ErnestAi.Host
             // Informational: list available models for the connected provider and show the selected one
             await ListAvailableModelsAsync(llmService);
             
-            // Subscribe to transcription events
-            SubscribeToTranscriptions(sttService);
+            // STT transcription logging is performed after TranscribeAsync() in the wake-word handler.
             
             // Setup wake word detection handler
             var cts = new CancellationTokenSource();
@@ -263,6 +263,9 @@ namespace ErnestAi.Host
                 // Transcribe audio
                 var transcription = await sttService.TranscribeAsync(audioStream);
                 Console.WriteLine($"You said: {transcription}");
+                // Fallback file logging: in case the STT service does not raise TextTranscribed events,
+                // we still persist the final transcription here.
+                File.AppendAllText("transcription_log.txt", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ?: {transcription}\n");
 
                 // Get response from LLM
                 Console.WriteLine("Thinking...");
@@ -396,28 +399,6 @@ namespace ErnestAi.Host
         }
 
         /// <summary>
-        /// Subscribes to STT transcription events and logs transcriptions to a local file.
-        /// </summary>
-        private static void SubscribeToTranscriptions(ISpeechToTextService sttService)
-        {
-            if (sttService is SpeechToTextService speechToTextService)
-            {
-                speechToTextService.TextTranscribed += (sender, e) =>
-                {
-                    try
-                    {
-                        File.AppendAllText("transcription_log.txt",
-                            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e.StartTime:F1}s-{e.EndTime:F1}s: {e.Text}\n");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error logging transcription: {ex.Message}");
-                    }
-                };
-            }
-        }
-
-        /// <summary>
         /// Starts the warmup orchestrator if it is registered/enabled.
         /// </summary>
         private static async Task StartWarmupAsync(WarmupOrchestrator? warmupOrchestrator, AppConfig config, CancellationToken token)
@@ -426,6 +407,41 @@ namespace ErnestAi.Host
             {
                 await warmupOrchestrator.StartAsync(config, token);
             }
+        }
+
+        /// <summary>
+        /// Sets up global exception handling for fatal and unobserved exceptions.
+        /// Use local try/catch only for expected, recoverable scenarios.
+        /// </summary>
+        private static void ConfigureGlobalExceptionHandling()
+        {
+            AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+            TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        }
+
+        private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            var ex = e.ExceptionObject as Exception;
+            Console.Error.WriteLine("[FATAL] Unhandled exception: " + (ex?.ToString() ?? "<unknown>"));
+            try
+            {
+                File.AppendAllText("fatal.log",
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] FATAL: {ex}\n");
+            }
+            catch { /* If logging fails, there's nothing more we can do */ }
+            Environment.Exit(1);
+        }
+
+        private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            Console.Error.WriteLine("[FATAL] Unobserved task exception: " + e.Exception);
+            try
+            {
+                File.AppendAllText("fatal.log",
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UNOBSERVED: {e.Exception}\n");
+            }
+            catch { }
+            e.SetObserved();
         }
     }
 }

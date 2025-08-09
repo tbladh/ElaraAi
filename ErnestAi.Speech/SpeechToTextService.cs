@@ -13,27 +13,6 @@ using ErnestAi.Configuration;
 namespace ErnestAi.Speech
 {
     /// <summary>
-    /// Event arguments for transcription events
-    /// </summary>
-    public class TranscriptionEventArgs : EventArgs
-    {
-        /// <summary>
-        /// The transcribed text
-        /// </summary>
-        public string Text { get; set; }
-        
-        /// <summary>
-        /// The start time of the transcription in seconds
-        /// </summary>
-        public double StartTime { get; set; }
-        
-        /// <summary>
-        /// The end time of the transcription in seconds
-        /// </summary>
-        public double EndTime { get; set; }
-    }
-    
-    /// <summary>
     /// Implementation of ISpeechToTextService using Whisper.net for speech recognition
     /// </summary>
     public class SpeechToTextService : ISpeechToTextService, IDisposable
@@ -45,10 +24,7 @@ namespace ErnestAi.Speech
         private bool _isInitialized;
         private readonly SpeechToTextConfig _config;
         
-        /// <summary>
-        /// Event fired when text is transcribed
-        /// </summary>
-        public event EventHandler<TranscriptionEventArgs> TextTranscribed;
+        
 
         /// <summary>
         /// Creates a new instance of the SpeechToTextService
@@ -160,13 +136,7 @@ namespace ErnestAi.Speech
                             Console.WriteLine($"[Transcribed {segment.StartTime:F1}s-{segment.EndTime:F1}s]: {segment.Text}");
                         }
                         
-                        // Raise event for subscribers
-                        TextTranscribed?.Invoke(this, new TranscriptionEventArgs
-                        {
-                            Text = segment.Text,
-                            StartTime = segment.StartTime,
-                            EndTime = segment.EndTime
-                        });
+                        // Eventing removed; host is responsible for logging the final transcription.
                         
                         yield return segment;
                     }
@@ -200,13 +170,7 @@ namespace ErnestAi.Speech
                         Console.WriteLine($"[Transcribed {segment.StartTime:F1}s-{segment.EndTime:F1}s]: {segment.Text}");
                     }
                     
-                    // Raise event for subscribers
-                    TextTranscribed?.Invoke(this, new TranscriptionEventArgs
-                    {
-                        Text = segment.Text,
-                        StartTime = segment.StartTime,
-                        EndTime = segment.EndTime
-                    });
+                    // Eventing removed; host is responsible for logging the final transcription.
                     
                     segments.Add(segment);
                 }
