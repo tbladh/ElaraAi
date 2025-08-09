@@ -213,6 +213,11 @@ namespace ErnestAi.Configuration
         /// Priority (1 is highest)
         /// </summary>
         public int Priority { get; set; }
+
+        /// <summary>
+        /// Optional regex filters applied to model outputs (as strings)
+        /// </summary>
+        public string[] Filter { get; set; }
     }
     
     /// <summary>

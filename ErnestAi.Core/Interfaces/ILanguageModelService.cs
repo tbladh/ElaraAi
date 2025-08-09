@@ -14,14 +14,6 @@ namespace ErnestAi.Core.Interfaces
         Task<string> GetResponseAsync(string prompt, CancellationToken cancellationToken = default);
         
         /// <summary>
-        /// Gets a streaming response from the language model for the given prompt
-        /// </summary>
-        /// <param name="prompt">The input prompt</param>
-        /// <param name="cancellationToken">Token to cancel the operation</param>
-        /// <returns>An asynchronous stream of response chunks</returns>
-        IAsyncEnumerable<string> GetStreamingResponseAsync(string prompt, CancellationToken cancellationToken = default);
-        
-        /// <summary>
         /// Gets the available models for this service
         /// </summary>
         /// <returns>A list of available model names</returns>
@@ -41,7 +33,13 @@ namespace ErnestAi.Core.Interfaces
         /// Gets the name of the language model service provider
         /// </summary>
         string ProviderName { get; }
-        
+
+        /// <summary>
+        /// Regex patterns (as strings) used to filter/snippet out unwanted text from outputs.
+        /// Patterns are applied as regular expressions using Singleline mode.
+        /// </summary>
+        IList<string> OutputFilters { get; set; }
+
         /// <summary>
         /// Gets a value indicating whether the service is available
         /// </summary>

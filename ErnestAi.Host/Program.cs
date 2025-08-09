@@ -61,8 +61,13 @@ namespace ErnestAi.Host
                 Console.WriteLine($"[LM] Trying {lm.Name} (provider={lm.Provider}, model={lm.ModelName})...");
                 try
                 {
-                    ILanguageModelService svc = lm.Provider.Equals("ollama", StringComparison.OrdinalIgnoreCase)
-                        ? new OllamaLanguageModelService(lm.ServiceUrl) { CurrentModel = lm.ModelName, SystemPrompt = lm.SystemPrompt }
+                    ILanguageModelService? svc = lm.Provider.Equals("ollama", StringComparison.OrdinalIgnoreCase)
+                        ? new OllamaLanguageModelService(lm.ServiceUrl)
+                        {
+                            CurrentModel = lm.ModelName,
+                            SystemPrompt = lm.SystemPrompt,
+                            OutputFilters = (lm.Filter != null) ? new List<string>(lm.Filter) : new List<string>()
+                        }
                         : null;
 
                     if (svc == null)

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace ErnestAi.Intelligence
 {
@@ -32,7 +33,12 @@ namespace ErnestAi.Intelligence
         /// <summary>
         /// Gets the name of the language model service provider
         /// </summary>
-        public string ProviderName => "Ollama";
+        public string ProviderName => "ollama";
+
+        /// <summary>
+        /// Regex patterns (as strings) used to filter/snippet out unwanted text from outputs.
+        /// </summary>
+        public IList<string> OutputFilters { get; set; } = new List<string>();
 
         /// <summary>
         /// Creates a new instance of the OllamaLanguageModelService
@@ -84,65 +90,39 @@ namespace ErnestAi.Intelligence
                 Stream = stream
             };
 
-            var response = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            if (!stream)
+            {
+                var resp = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
+                resp.EnsureSuccessStatusCode();
+                var result = await resp.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cancellationToken: cancellationToken);
+                var text = result?.Response ?? string.Empty;
+                return ApplyFilters(text);
+            }
 
-            var result = await response.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cancellationToken: cancellationToken);
-            return result?.Response ?? string.Empty;
+            // Streaming is handled by GetStreamingResponseAsync; this method shouldn't be called with stream=true
+            throw new InvalidOperationException("SendGenerateAsync was called with stream=true. Use GetStreamingResponseAsync for streaming responses.");
         }
 
-        /// <summary>
-        /// Gets a streaming response from the language model for the given prompt
-        /// </summary>
-        public async IAsyncEnumerable<string> GetStreamingResponseAsync(
-            string prompt, 
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        private string ApplyFilters(string text)
         {
-            await EnsureModelSelectedAsync();
-
-            // Prepare the request
-            var request = new OllamaGenerateRequest
+            if (string.IsNullOrEmpty(text) || OutputFilters == null || OutputFilters.Count == 0)
             {
-                Model = CurrentModel,
-                Prompt = prompt,
-                System = SystemPrompt,
-                Stream = true
-            };
-
-            // Send the request
-            var response = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            // Read the streaming response
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var reader = new System.IO.StreamReader(stream);
-
-            while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+                return text ?? string.Empty;
+            }
+            var output = text;
+            foreach (var pattern in OutputFilters)
             {
-                var line = await reader.ReadLineAsync();
-                if (string.IsNullOrEmpty(line))
-                    continue;
-
-                string chunkResponse = null;
+                if (string.IsNullOrWhiteSpace(pattern)) continue;
                 try
                 {
-                    var chunk = JsonSerializer.Deserialize<OllamaGenerateResponse>(line);
-                    if (!string.IsNullOrEmpty(chunk?.Response))
-                    {
-                        chunkResponse = chunk.Response;
-                    }
+                    output = Regex.Replace(output, pattern, string.Empty, RegexOptions.Singleline);
                 }
-                catch (JsonException)
+                catch
                 {
-                    // Skip malformed JSON
-                    continue;
-                }
-                
-                if (chunkResponse != null)
-                {
-                    yield return chunkResponse;
+                    // Ignore bad patterns
                 }
             }
+            return output;
         }
 
         /// <summary>
