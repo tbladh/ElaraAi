@@ -16,6 +16,9 @@ namespace ErnestAi.Sandbox.Chunking
         // Tunables for this sandbox
         private const int ChunkMs = 3000;         // 3 seconds per chunk (better context)
         private const int AudioQueueCapacity = 16;
+        private const string WakeWord = "anna"; // simple wake word for sandbox
+        private const int ProcessingSilenceSeconds = 5;  // after 5s of silence, enter processing
+        private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
 
         private static async Task Main(string[] args)
         {
@@ -40,7 +43,7 @@ namespace ErnestAi.Sandbox.Chunking
                     // Use a slightly larger Whisper model for improved recognition. Adjust if needed.
                     services.AddSingleton<ISpeechToTextService>(_ => new SpeechToTextService(
                         modelFileName: "ggml-base.en.bin",
-                        modelUrl: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"));
+                        modelUrl: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"));
                 })
                 .Build();
 
@@ -56,11 +59,22 @@ namespace ErnestAi.Sandbox.Chunking
                 audioChannel.Writer,
                 ChunkMs);
 
+            var console = new CompactConsole();
+
+            var fsm = new ConversationStateMachine(
+                WakeWord,
+                TimeSpan.FromSeconds(ProcessingSilenceSeconds),
+                TimeSpan.FromSeconds(EndSilenceSeconds),
+                console);
+
             var transcriber = new Transcriber(
                 host.Services.GetRequiredService<ISpeechToTextService>(),
-                audioChannel.Reader);
+                audioChannel.Reader,
+                fsm,
+                console);
 
-            Console.WriteLine("Sandbox: Recording chunks and printing transcriptions. Press Ctrl+C to stop.");
+            console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press Ctrl+C to stop.");
+            console.WriteSpeechLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
 
             var recordTask = recorder.RunAsync(cts.Token);
             var transcribeTask = transcriber.RunAsync(cts.Token);
