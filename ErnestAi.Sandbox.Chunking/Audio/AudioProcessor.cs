@@ -1,0 +1,221 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using ErnestAi.Sandbox.Chunking.Core.Interfaces;
+using NAudio.Utils;
+using NAudio.Wave;
+
+namespace ErnestAi.Sandbox.Chunking.Audio
+{
+    /// <summary>
+    /// Minimal AudioProcessor using NAudio, adapted for sandbox
+    /// </summary>
+    public class AudioProcessor : IAudioProcessor, IDisposable
+    {
+        private WaveInEvent? _waveIn;
+        private WaveFileWriter? _writer;
+        private MemoryStream? _memoryStream;
+        private readonly WaveFormat _waveFormat;
+        private bool _isRecording;
+        private readonly SemaphoreSlim _recordingSemaphore = new(1, 1);
+
+        private TaskCompletionSource<bool>? _firstDataTcs;
+        private TaskCompletionSource<bool>? _recordingStoppedTcs;
+        private long _bytesWritten;
+
+        public AudioProcessor(int sampleRate = 16000, int channels = 1)
+        {
+            _waveFormat = new WaveFormat(sampleRate, channels);
+        }
+
+        public async Task StartRecordingAsync()
+        {
+            await _recordingSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_isRecording) return;
+
+                _memoryStream = new MemoryStream();
+                _writer = new WaveFileWriter(new IgnoreDisposeStream(_memoryStream), _waveFormat);
+
+                _bytesWritten = 0;
+                _firstDataTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _recordingStoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                _waveIn = new WaveInEvent
+                {
+                    WaveFormat = _waveFormat,
+                    BufferMilliseconds = 250
+                };
+
+                _waveIn.DataAvailable += (s, a) =>
+                {
+                    if (_writer != null)
+                    {
+                        _writer.Write(a.Buffer, 0, a.BytesRecorded);
+                        _bytesWritten += a.BytesRecorded;
+                        if (!_firstDataTcs!.Task.IsCompleted)
+                        {
+                            _firstDataTcs.TrySetResult(true);
+                        }
+                    }
+                };
+
+                _waveIn.RecordingStopped += (s, a) =>
+                {
+                    if (!_recordingStoppedTcs!.Task.IsCompleted)
+                    {
+                        _recordingStoppedTcs.TrySetResult(true);
+                    }
+                };
+
+                _isRecording = true;
+                _waveIn.StartRecording();
+
+                var firstDataWait = await Task.WhenAny(_firstDataTcs.Task, Task.Delay(1000)).ConfigureAwait(false);
+                if (firstDataWait != _firstDataTcs.Task)
+                {
+                    throw new InvalidOperationException("No audio data received from input device.");
+                }
+            }
+            finally
+            {
+                _recordingSemaphore.Release();
+            }
+        }
+
+        public async Task<Stream> StopRecordingAsync()
+        {
+            await _recordingSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (!_isRecording || _memoryStream == null)
+                {
+                    return new MemoryStream();
+                }
+
+                _recordingStoppedTcs ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                _waveIn?.StopRecording();
+                _isRecording = false;
+
+                await Task.WhenAny(_recordingStoppedTcs.Task, Task.Delay(1000)).ConfigureAwait(false);
+
+                _waveIn?.Dispose();
+                _waveIn = null;
+
+                _writer?.Flush();
+                _writer?.Dispose();
+                _writer = null;
+
+                var resultStream = new MemoryStream();
+
+                try
+                {
+                    if (_memoryStream != null && _memoryStream.CanRead)
+                    {
+                        _memoryStream.Position = 0;
+                        await _memoryStream.CopyToAsync(resultStream).ConfigureAwait(false);
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                finally
+                {
+                    try { _memoryStream?.Dispose(); } catch { }
+                    _memoryStream = null;
+                }
+
+                resultStream.Position = 0;
+
+                var minLength = 44 + _waveFormat.AverageBytesPerSecond;
+                if (resultStream.Length < minLength)
+                {
+                    throw new InvalidOperationException($"Recorded audio too short ({resultStream.Length} bytes, wrote {_bytesWritten} bytes).");
+                }
+
+                return resultStream;
+            }
+            finally
+            {
+                _recordingSemaphore.Release();
+            }
+        }
+
+        public async IAsyncEnumerable<byte[]> GetAudioStreamAsync(CancellationToken cancellationToken)
+        {
+            var waveIn = new WaveInEvent
+            {
+                WaveFormat = _waveFormat,
+                BufferMilliseconds = 100
+            };
+
+            var bufferQueue = new Queue<byte[]>();
+            var bufferAvailable = new SemaphoreSlim(0);
+
+            waveIn.DataAvailable += (s, a) =>
+            {
+                var buffer = new byte[a.BytesRecorded];
+                Array.Copy(a.Buffer, buffer, a.BytesRecorded);
+
+                lock (bufferQueue)
+                {
+                    bufferQueue.Enqueue(buffer);
+                }
+
+                bufferAvailable.Release();
+            };
+
+            waveIn.StartRecording();
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await bufferAvailable.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+                    byte[] buffer;
+                    lock (bufferQueue)
+                    {
+                        buffer = bufferQueue.Dequeue();
+                    }
+
+                    yield return buffer;
+                }
+            }
+            finally
+            {
+                waveIn.StopRecording();
+                waveIn.Dispose();
+            }
+        }
+
+        public Task PlayAudioAsync(Stream audioData)
+        {
+            return Task.Run(() =>
+            {
+                audioData.Position = 0;
+                using var reader = new WaveFileReader(audioData);
+                using var waveOut = new WaveOutEvent();
+                waveOut.Init(reader);
+                waveOut.Play();
+
+                while (waveOut.PlaybackState == PlaybackState.Playing)
+                {
+                    Thread.Sleep(100);
+                }
+            });
+        }
+
+        public void Dispose()
+        {
+            _waveIn?.Dispose();
+            _writer?.Dispose();
+            _memoryStream?.Dispose();
+            _recordingSemaphore?.Dispose();
+        }
+    }
+}

@@ -1,0 +1,140 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net.Http;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using ErnestAi.Sandbox.Chunking.Core.Interfaces;
+using Whisper.net;
+
+namespace ErnestAi.Sandbox.Chunking.Speech
+{
+    /// <summary>
+    /// Minimal Whisper.net-backed STT for the sandbox
+    /// </summary>
+    public sealed class SpeechToTextService : ISpeechToTextService, IDisposable
+    {
+        private readonly string _modelFileName;
+        private readonly string _modelUrl;
+        private WhisperProcessor? _processor;
+        private readonly SemaphoreSlim _initSemaphore = new(1, 1);
+        private bool _isInitialized;
+
+        public SpeechToTextService(
+            string modelFileName = "ggml-base.en.bin",
+            string modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin")
+        {
+            _modelFileName = modelFileName;
+            _modelUrl = modelUrl;
+        }
+
+        private async Task InitializeAsync()
+        {
+            await _initSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_isInitialized) return;
+
+                string modelPath = await EnsureModelAsync(_modelFileName, _modelUrl).ConfigureAwait(false);
+                var factory = WhisperFactory.FromPath(modelPath);
+                _processor = factory.CreateBuilder()
+                    .WithLanguage("en")
+                    .Build();
+
+                _isInitialized = true;
+            }
+            finally
+            {
+                _initSemaphore.Release();
+            }
+        }
+
+        public async Task<string> TranscribeAsync(Stream audioStream)
+        {
+            await InitializeAsync().ConfigureAwait(false);
+            string result = string.Empty;
+            await foreach (var segment in _processor!.ProcessAsync(audioStream).ConfigureAwait(false))
+            {
+                result += segment.Text;
+            }
+            return result.Trim();
+        }
+
+        public async Task<string> TranscribeFileAsync(string audioFilePath)
+        {
+            await using var fs = File.OpenRead(audioFilePath);
+            return await TranscribeAsync(fs).ConfigureAwait(false);
+        }
+
+        public async IAsyncEnumerable<TranscriptionSegment> TranscribeStreamAsync(
+            IAsyncEnumerable<byte[]> audioStream,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await InitializeAsync().ConfigureAwait(false);
+
+            using var buffer = new MemoryStream();
+            await foreach (var chunk in audioStream.WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                buffer.Write(chunk, 0, chunk.Length);
+                if (buffer.Length >= 32000) // ~1s at 16kHz 16-bit mono
+                {
+                    buffer.Position = 0;
+                    await foreach (var seg in _processor!.ProcessAsync(buffer).ConfigureAwait(false))
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                            yield break;
+
+                        yield return new TranscriptionSegment
+                        {
+                            Text = seg.Text,
+                            StartTime = seg.Start.TotalSeconds,
+                            EndTime = seg.End.TotalSeconds,
+                            Confidence = 1.0f
+                        };
+                    }
+                    buffer.SetLength(0);
+                }
+            }
+
+            if (buffer.Length > 0)
+            {
+                buffer.Position = 0;
+                await foreach (var seg in _processor!.ProcessAsync(buffer).ConfigureAwait(false))
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        yield break;
+
+                    yield return new TranscriptionSegment
+                    {
+                        Text = seg.Text,
+                        StartTime = seg.Start.TotalSeconds,
+                        EndTime = seg.End.TotalSeconds,
+                        Confidence = 1.0f
+                    };
+                }
+            }
+        }
+
+        private static async Task<string> EnsureModelAsync(string fileName, string url)
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string modelPath = Path.Combine(baseDir, fileName);
+            if (!File.Exists(modelPath))
+            {
+                Console.WriteLine($"Downloading Whisper model '{fileName}'...");
+                using var client = new HttpClient();
+                var bytes = await client.GetByteArrayAsync(url).ConfigureAwait(false);
+                await File.WriteAllBytesAsync(modelPath, bytes).ConfigureAwait(false);
+                Console.WriteLine("Model downloaded.");
+            }
+            return modelPath;
+        }
+
+        public void Dispose()
+        {
+            _processor?.Dispose();
+            _initSemaphore?.Dispose();
+        }
+    }
+}

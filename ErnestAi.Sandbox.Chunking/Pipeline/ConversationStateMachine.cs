@@ -1,11 +1,11 @@
 using System;
 
 namespace ErnestAi.Sandbox.Chunking;
-
+// TODO: Should handle maximum rambling cut-off (e.g., user keeps talking without pause).
 public sealed class ConversationStateMachine
 {
     public ConversationMode Mode { get; private set; } = ConversationMode.Quiescent;
-    public bool IsProcessing { get; private set; }
+    public bool IsProcessing { get; private set; } // TODO: This should simply be an event.
 
     public string WakeWord { get; }
     public TimeSpan ProcessingSilence { get; }

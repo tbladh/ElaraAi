@@ -2,9 +2,9 @@ using System;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using ErnestAi.Core.Interfaces;
-using ErnestAi.Audio;
-using ErnestAi.Speech;
+using ErnestAi.Sandbox.Chunking.Core.Interfaces;
+using ErnestAi.Sandbox.Chunking.Audio;
+using ErnestAi.Sandbox.Chunking.Speech;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -40,7 +40,7 @@ namespace ErnestAi.Sandbox.Chunking
                 {
                     // Minimal concrete implementations
                     services.AddSingleton<IAudioProcessor>(_ => new AudioProcessor());
-                    // Use a slightly larger Whisper model for improved recognition. Adjust if needed.
+                    // Configure Whisper model for sandbox
                     services.AddSingleton<ISpeechToTextService>(_ => new SpeechToTextService(
                         modelFileName: "ggml-base.en.bin",
                         modelUrl: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"));
