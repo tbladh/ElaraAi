@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
+using ErnestAi.Sandbox.Chunking.Tools;
 using Whisper.net;
 
 namespace ErnestAi.Sandbox.Chunking.Speech
@@ -36,7 +36,9 @@ namespace ErnestAi.Sandbox.Chunking.Speech
             {
                 if (_isInitialized) return;
 
-                string modelPath = await EnsureModelAsync(_modelFileName, _modelUrl).ConfigureAwait(false);
+                // Ensure model is available in a dedicated sandbox models folder
+                string modelsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "Whisper");
+                string modelPath = await FileDownloader.EnsureInDirectoryAsync(modelsDir, _modelFileName, _modelUrl).ConfigureAwait(false);
                 var factory = WhisperFactory.FromPath(modelPath);
                 _processor = factory.CreateBuilder()
                     .WithLanguage("en")
@@ -116,20 +118,7 @@ namespace ErnestAi.Sandbox.Chunking.Speech
             }
         }
 
-        private static async Task<string> EnsureModelAsync(string fileName, string url)
-        {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string modelPath = Path.Combine(baseDir, fileName);
-            if (!File.Exists(modelPath))
-            {
-                Console.WriteLine($"Downloading Whisper model '{fileName}'...");
-                using var client = new HttpClient();
-                var bytes = await client.GetByteArrayAsync(url).ConfigureAwait(false);
-                await File.WriteAllBytesAsync(modelPath, bytes).ConfigureAwait(false);
-                Console.WriteLine("Model downloaded.");
-            }
-            return modelPath;
-        }
+        // Model acquisition handled by Tools.FileDownloader
 
         public void Dispose()
         {
