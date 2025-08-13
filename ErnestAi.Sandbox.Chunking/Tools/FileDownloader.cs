@@ -47,5 +47,36 @@ namespace ErnestAi.Sandbox.Chunking.Tools
             var target = Path.Combine(baseDirectory, fileName);
             return EnsureFileAsync(target, url);
         }
+
+        /// <summary>
+        /// Downloads a file from url to targetPath, creating directories as needed.
+        /// Overwrites the target file if it exists. Uses a temporary file for atomic replacement.
+        /// </summary>
+        public static async Task DownloadToFileAsync(string targetPath, string url)
+        {
+            var directory = Path.GetDirectoryName(targetPath)!;
+            Directory.CreateDirectory(directory);
+
+            var tempPath = targetPath + ".tmp";
+
+            using var client = new HttpClient();
+            var bytes = await client.GetByteArrayAsync(url).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(tempPath, bytes).ConfigureAwait(false);
+
+            if (File.Exists(targetPath))
+            {
+                File.Delete(targetPath);
+            }
+
+            File.Move(tempPath, targetPath);
+        }
+
+        /// <summary>
+        /// Synchronous wrapper for DownloadToFileAsync for use at composition root startup.
+        /// </summary>
+        public static void DownloadToFile(string targetPath, string url)
+        {
+            DownloadToFileAsync(targetPath, url).GetAwaiter().GetResult();
+        }
     }
 }

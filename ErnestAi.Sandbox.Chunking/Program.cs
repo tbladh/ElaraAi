@@ -1,10 +1,12 @@
 using System.Threading.Channels;
+using System.IO;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
 using ErnestAi.Sandbox.Chunking.Audio;
 using ErnestAi.Sandbox.Chunking.Speech;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ErnestAi.Sandbox.Chunking.Tools;
 
 namespace ErnestAi.Sandbox.Chunking
 {
@@ -37,10 +39,23 @@ namespace ErnestAi.Sandbox.Chunking
                 {
                     // Minimal concrete implementations
                     services.AddSingleton<IAudioProcessor>(_ => new AudioProcessor());
-                    // Configure Whisper model for sandbox
-                    services.AddSingleton<ISpeechToTextService>(_ => new SpeechToTextService(
-                        modelFileName: "ggml-base.en.bin",
-                        modelUrl: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"));
+                    // Prepare Whisper model path at composition root (download if missing), then construct STT with path
+                    services.AddSingleton<ISpeechToTextService>(_ =>
+                    {
+                        var modelsDir = FileSystem.Combine(FileSystem.BaseDirectory, "Models", "Whisper");
+                        var modelFile = "ggml-base.en.bin";
+                        var modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin";
+                        var modelPath = FileSystem.Combine(modelsDir, modelFile);
+
+                        if (!File.Exists(modelPath))
+                        {
+                            Console.WriteLine($"[STT] Downloading Whisper model '{modelFile}'...");
+                            FileDownloader.DownloadToFile(modelPath, modelUrl);
+                            Console.WriteLine("[STT] Model downloaded.");
+                        }
+
+                        return new SpeechToTextService(modelPath);
+                    });
                 })
                 .Build();
 
