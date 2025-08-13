@@ -1,0 +1,125 @@
+# ErnestAi.Sandbox.Chunking
+
+A minimal, isolated console sandbox to prototype a chunked audio pipeline:
+- Record short audio chunks from the microphone
+- Transcribe each chunk to text
+- Drive a conversation state machine based on wake word and silence windows
+- Aggregate a session transcript when the conversation ends
+
+This project is the embryo for a modular, queue-driven architecture that will later feed downstream components (prompt building, LLMs, TTS responses).
+
+## Pipeline overview
+
+- Recorder reads microphone input and emits `AudioChunk` items.
+- Transcriber consumes `AudioChunk`, performs STT, and emits `TranscriptionItem` items.
+- ConversationStateMachine (CSM) consumes `TranscriptionItem` items, manages session state (quiescent/listening/processing), and prints the aggregated session prompt on end-of-session.
+
+### Mermaid diagram (as implemented in code)
+
+```mermaid
+flowchart LR
+    subgraph Program.cs [Composition Root]
+      A[Recorder] -->|AudioChunk| AC[(Channel<AudioChunk>)]
+      AC --> B[Transcriber]
+      B -->|TranscriptionItem| TC[(Channel<TranscriptionItem>)]
+      TC --> C[ConversationStateMachine]
+    end
+```
+
+## Key components and files
+
+- Recorder: `Pipeline/Recorder.cs`
+  - Emits `AudioChunk` to a bounded channel (capacity configurable).
+  - Owns and disposes the chunk stream.
+
+- Transcriber: `Pipeline/Transcriber.cs`
+  - Consumes `AudioChunk`, calls `ISpeechToTextService.TranscribeAsync(stream)`.
+  - Emits `TranscriptionItem` with sequence, timestamp, text, meaningful flag, and word count.
+  - Console UX: prints meaningful text lines; prints compact dots during silence.
+
+- ConversationStateMachine: `Pipeline/ConversationStateMachine.cs`
+  - Consumes `TranscriptionItem` from the channel (via a reader loop started in `Program.cs`).
+  - Transitions: Quiescent → Listening (wake word), Listening ↔ Processing (silence threshold), Listening → Quiescent (extended silence).
+  - Buffers meaningful items during a session; on end-of-session prints an aggregated prompt.
+
+- Contracts: `Core/Interfaces/*.cs`
+  - `IAudioProcessor`, `ISpeechToTextService` keep the sandbox decoupled from implementations.
+
+- Implementations: `Audio/AudioProcessor.cs`, `Speech/SpeechToTextService.cs`
+  - Minimal, single-responsibility classes used by the sandbox.
+
+- Utilities: `Tools/FileSystem.cs`, `Tools/FileDownloader.cs`
+  - Simple static helpers used at the composition root (see Philosophy below).
+
+## Execution flow (high level)
+
+1) `Program.cs` wires the pipeline:
+   - Creates `Channel<AudioChunk>` and `Channel<TranscriptionItem>`.
+   - Prepares Whisper STT model on disk (downloads once if missing).
+   - Registers concrete services, then starts three tasks:
+     - `Recorder.RunAsync()` produces audio chunks.
+     - `Transcriber.RunAsync()` transcribes chunks and produces transcription items.
+     - CSM consumer loop reads `TranscriptionItem` and drives state + aggregation.
+
+2) On wake word detection, CSM enters Listening.
+
+3) After short silence, CSM enters Processing; after extended silence, session ends.
+
+4) CSM aggregates buffered `TranscriptionItem.Text` and prints the session prompt.
+
+## Tunables (in `Program.cs`)
+
+- `ChunkMs`: size of each recorded audio chunk (default: 3000 ms)
+- `AudioQueueCapacity`: bounded channel capacity for `AudioChunk`
+- `WakeWord`: simple case-insensitive match (default: "anna")
+- `ProcessingSilenceSeconds`: short silence before marking as processing
+- `EndSilenceSeconds`: extended silence to end the session
+
+## Utilities and composition-root philosophy
+
+- Balanced DI: We use dependency injection where it adds value, but keep simple, static utilities at the composition root for housekeeping (filesystem checks, downloads). Avoid heavy factory patterns for basic utilities.
+- Async + Sync variants: In the sandbox host/composition root, utility functions provide both asynchronous and synchronous versions. Order methods with Async first, then the synchronous wrapper immediately after.
+  - `Tools/FileDownloader.cs`:
+    - Async: `EnsureFileAsync`, `EnsureInDirectoryAsync`, `DownloadToFileAsync`
+    - Sync:  `EnsureFile`, `EnsureInDirectory`, `DownloadToFile`
+  - `Tools/FileSystem.cs` is intentionally simple and synchronous for path operations.
+
+## AI models working on the project (philosophies)
+
+This sandbox prototypes the ingestion side. The broader ErnestAI project follows these principles when integrating AI models:
+
+- Keep it local-first and self-contained when possible.
+- Favor simplicity and clear responsibilities; avoid leaking IO/network concerns into core services.
+- Strict, explicit configuration (no hidden defaults) and early validation at startup.
+- Minimal warmup strategy for local models: small, periodic pings controlled by config; minimal logging.
+- Output filtering (e.g., regex) applied at model service boundaries to normalize provider-specific artifacts.
+- Deterministic selection of providers/models based on ordered preference in config; fail fast if unavailable.
+
+Sandbox specifics related to STT:
+- Uses Whisper (CPU) with a small English model (e.g., `ggml-base.en.bin`).
+- Model path is prepared in `Program.cs` using `Tools.FileDownloader` and passed into `SpeechToTextService` (the service does not download).
+
+Future integration (outside this sandbox):
+- Aggregate the session text into a prompt and forward to a language model service (e.g., Ollama), then synthesize a response with TTS.
+
+## Getting started
+
+- Prerequisites: .NET 8 SDK, microphone access.
+- First run will download the Whisper model to a `Models/Whisper/` folder alongside the app base directory (overwrites if re-downloaded).
+- Build and run from your preferred environment. The user prefers to run builds manually.
+
+Once running:
+- Speak the wake word (default: "anna") to enter Listening.
+- Speak naturally; short silences move into Processing; extended silence ends the session.
+- The aggregated session text is printed as a prompt line.
+
+## Extensibility ideas
+
+- Replace wake word detection with a streaming detector.
+- Support multiple STT engines behind `ISpeechToTextService`.
+- Introduce a plug-in Aggregator to perform smarter chunk selection/cleaning.
+- Wire the aggregated prompt into the LLM and TTS chains.
+
+---
+
+Status: experimental sandbox for pipeline prototyping. Contributions welcome.

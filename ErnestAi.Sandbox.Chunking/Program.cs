@@ -81,7 +81,7 @@ namespace ErnestAi.Sandbox.Chunking
 
             var console = new CompactConsole();
 
-            var fsm = new ConversationStateMachine(
+            var csm = new ConversationStateMachine(
                 WakeWord,
                 TimeSpan.FromSeconds(ProcessingSilenceSeconds),
                 TimeSpan.FromSeconds(EndSilenceSeconds),
@@ -96,14 +96,14 @@ namespace ErnestAi.Sandbox.Chunking
             console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press Ctrl+C to stop.");
             console.WriteSpeechLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
 
-            // FSM consumer loop for transcription items
+            // CSM consumer loop for transcription items
             var fsmTask = Task.Run(async () =>
             {
                 try
                 {
                     await foreach (var item in transcriptionChannel.Reader.ReadAllAsync(cts.Token))
                     {
-                        fsm.HandleTranscription(item);
+                        csm.HandleTranscription(item);
                     }
                 }
                 catch (OperationCanceledException) { }
