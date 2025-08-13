@@ -49,6 +49,22 @@ namespace ErnestAi.Sandbox.Chunking.Tools
         }
 
         /// <summary>
+        /// Synchronous wrapper for EnsureFileAsync.
+        /// </summary>
+        public static string EnsureFile(string targetPath, string url)
+        {
+            return EnsureFileAsync(targetPath, url).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Synchronous wrapper for EnsureInDirectoryAsync.
+        /// </summary>
+        public static string EnsureInDirectory(string baseDirectory, string fileName, string url)
+        {
+            return EnsureInDirectoryAsync(baseDirectory, fileName, url).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
         /// Downloads a file from url to targetPath, creating directories as needed.
         /// Overwrites the target file if it exists. Uses a temporary file for atomic replacement.
         /// </summary>
