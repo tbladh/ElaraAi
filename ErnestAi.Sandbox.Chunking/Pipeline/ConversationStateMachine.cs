@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ErnestAi.Sandbox.Chunking;
 // TODO: Should handle maximum rambling cut-off (e.g., user keeps talking without pause).
@@ -14,6 +15,7 @@ public sealed class ConversationStateMachine
 
     public DateTimeOffset? ListeningSince { get; private set; }
     public DateTimeOffset? LastHeardAt { get; private set; }
+    private readonly List<TranscriptionItem> _buffer = new();
 
     public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, CompactConsole console)
     {
@@ -57,6 +59,21 @@ public sealed class ConversationStateMachine
         }
     }
 
+    /// <summary>
+    /// Preferred entry: consume a TranscriptionItem and update state/buffer.
+    /// </summary>
+    public void HandleTranscription(TranscriptionItem item)
+    {
+        // Wake detection uses raw text
+        HandleTranscription(item.TimestampUtc, item.Text, item.IsMeaningful);
+
+        // Buffer meaningful items only while listening/processing
+        if (Mode == ConversationMode.Listening && item.IsMeaningful)
+        {
+            _buffer.Add(item);
+        }
+    }
+
     private void EvaluateSilence(DateTimeOffset nowUtc)
     {
         if (Mode != ConversationMode.Listening)
@@ -88,10 +105,19 @@ public sealed class ConversationStateMachine
 
     private void TransitionToQuiescent(string reason)
     {
+        // Aggregate and print buffered session text before resetting
+        if (_buffer.Count > 0)
+        {
+            var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
+            var stamp = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
+            _console.WriteStateLine($"[{stamp}] [SESSION] Prompt: {joined}");
+        }
+
         Mode = ConversationMode.Quiescent;
         IsProcessing = false;
         ListeningSince = null;
         LastHeardAt = null;
+        _buffer.Clear();
         Log($"Listening -> Quiescent ({reason})");
     }
 

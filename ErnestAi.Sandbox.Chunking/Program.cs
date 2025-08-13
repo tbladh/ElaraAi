@@ -66,6 +66,14 @@ namespace ErnestAi.Sandbox.Chunking
                 SingleWriter = true
             });
 
+            // Transcription pipeline channel (producer: Transcriber, consumer: future aggregator)
+            var transcriptionChannel = Channel.CreateBounded<TranscriptionItem>(new BoundedChannelOptions(64)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = true
+            });
+
             var recorder = new Recorder(
                 host.Services.GetRequiredService<IAudioProcessor>(),
                 audioChannel.Writer,
@@ -82,16 +90,29 @@ namespace ErnestAi.Sandbox.Chunking
             var transcriber = new Transcriber(
                 host.Services.GetRequiredService<ISpeechToTextService>(),
                 audioChannel.Reader,
-                fsm,
-                console);
+                console,
+                transcriptionChannel.Writer);
 
             console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press Ctrl+C to stop.");
             console.WriteSpeechLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
 
+            // FSM consumer loop for transcription items
+            var fsmTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (var item in transcriptionChannel.Reader.ReadAllAsync(cts.Token))
+                    {
+                        fsm.HandleTranscription(item);
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }, cts.Token);
+
             var recordTask = recorder.RunAsync(cts.Token);
             var transcribeTask = transcriber.RunAsync(cts.Token);
 
-            await Task.WhenAll(recordTask, transcribeTask);
+            await Task.WhenAll(recordTask, transcribeTask, fsmTask);
         }
     }
 }

@@ -10,17 +10,17 @@ public sealed class Transcriber
 {
     private readonly ISpeechToTextService _stt;
     private readonly ChannelReader<AudioChunk> _reader;
-    private readonly ConversationStateMachine _fsm;
+    private readonly ChannelWriter<TranscriptionItem>? _outWriter;
     private readonly CompactConsole _console;
     private bool _inSilenceRun;
 
     private const int MinWords = 1; // relaxed heuristic for sensitivity
 
-    public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, ConversationStateMachine fsm, CompactConsole console)
+    public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, CompactConsole console, ChannelWriter<TranscriptionItem>? outWriter = null)
     {
         _stt = stt;
         _reader = reader;
-        _fsm = fsm;
+        _outWriter = outWriter;
         _console = console;
     }
 
@@ -33,6 +33,15 @@ public sealed class Transcriber
                 var text = await _stt.TranscribeAsync(chunk.Stream);
                 var wordCount = CountWords(text);
                 var meaningful = !string.IsNullOrWhiteSpace(text) && wordCount >= MinWords;
+
+                var item = new TranscriptionItem
+                {
+                    Sequence = chunk.Sequence,
+                    TimestampUtc = chunk.TimestampUtc,
+                    Text = text,
+                    IsMeaningful = meaningful,
+                    WordCount = wordCount
+                };
 
                 var stamp = chunk.TimestampUtc.LocalDateTime.ToString("HH:mm:ss");
                 var label = meaningful ? "ok" : "weak";
@@ -50,8 +59,15 @@ public sealed class Transcriber
                     _inSilenceRun = true;
                 }
 
-                // Notify FSM of the transcription for wake/silence handling
-                _fsm.HandleTranscription(chunk.TimestampUtc, text, meaningful);
+                // Publish to downstream pipeline
+                if (_outWriter is not null)
+                {
+                    try
+                    {
+                        await _outWriter.WriteAsync(item, token);
+                    }
+                    catch (OperationCanceledException) { /* ignore on shutdown */ }
+                }
             }
             catch (OperationCanceledException)
             {
