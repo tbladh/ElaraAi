@@ -18,6 +18,8 @@ namespace ErnestAi.Sandbox.Chunking
         private const string WakeWord = "anna"; // simple wake word for sandbox
         private const int ProcessingSilenceSeconds = 5;  // after 5s of silence, enter processing
         private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
+        private const string SttModelFile = "ggml-medium.en.bin";
+        private const string SttModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin";
 
         private static async Task Main(string[] args)
         {
@@ -39,25 +41,23 @@ namespace ErnestAi.Sandbox.Chunking
                 {
                     // Minimal concrete implementations
                     services.AddSingleton<IAudioProcessor>(_ => new AudioProcessor());
-                    // Prepare Whisper model path at composition root (download if missing), then construct STT with path
+                    // Construct STT with desired Whisper model (download handled inside service via Tools)
                     services.AddSingleton<ISpeechToTextService>(_ =>
                     {
-                        var modelsDir = FileSystem.Combine(FileSystem.BaseDirectory, "Models", "Whisper");
-                        var modelFile = "ggml-base.en.bin";
-                        var modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin";
-                        var modelPath = FileSystem.Combine(modelsDir, modelFile);
-
-                        if (!File.Exists(modelPath))
-                        {
-                            Console.WriteLine($"[STT] Downloading Whisper model '{modelFile}'...");
-                            FileDownloader.DownloadToFile(modelPath, modelUrl);
-                            Console.WriteLine("[STT] Model downloaded.");
-                        }
-
-                        return new SpeechToTextService(modelPath);
+                        return new SpeechToTextService(SttModelFile, SttModelUrl);
                     });
                 })
                 .Build();
+
+            // Ensure STT model is present BEFORE starting recording/transcription
+            var modelsDirPre = FileSystem.Combine(FileSystem.BaseDirectory, "Models", "Whisper");
+            var modelPathPre = FileSystem.Combine(modelsDirPre, SttModelFile);
+            if (!File.Exists(modelPathPre))
+            {
+                Console.WriteLine($"[STT] Downloading Whisper model '{SttModelFile}'...\n       URL: {SttModelUrl}\n       Path: {modelPathPre}");
+                await FileDownloader.DownloadToFileAsync(modelPathPre, SttModelUrl);
+                Console.WriteLine($"[STT] Model ready: {modelPathPre}");
+            }
 
             var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(AudioQueueCapacity)
             {

@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
 using ErnestAi.Sandbox.Chunking.Tools;
 using Whisper.net;
@@ -21,9 +21,7 @@ namespace ErnestAi.Sandbox.Chunking.Speech
         private readonly SemaphoreSlim _initSemaphore = new(1, 1);
         private bool _isInitialized;
 
-        public SpeechToTextService(
-            string modelFileName = "ggml-base.en.bin",
-            string modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin")
+        public SpeechToTextService(string modelFileName, string modelUrl)
         {
             _modelFileName = modelFileName;
             _modelUrl = modelUrl;
@@ -36,9 +34,14 @@ namespace ErnestAi.Sandbox.Chunking.Speech
             {
                 if (_isInitialized) return;
 
-                // Ensure model is available in a dedicated sandbox models folder
+                // Verify model presence in sandbox models folder; fatal if missing
                 string modelsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "Whisper");
-                string modelPath = await FileDownloader.EnsureInDirectoryAsync(modelsDir, _modelFileName, _modelUrl).ConfigureAwait(false);
+                string modelPath = Path.Combine(modelsDir, _modelFileName);
+                if (!File.Exists(modelPath))
+                {
+                    throw new FileNotFoundException(
+                        $"Whisper model not found: '{modelPath}'. Pre-download is required at the composition root.");
+                }
                 _factory = WhisperFactory.FromPath(modelPath);
 
                 _isInitialized = true;
