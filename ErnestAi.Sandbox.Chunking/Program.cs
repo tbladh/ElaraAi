@@ -31,6 +31,9 @@ namespace ErnestAi.Sandbox.Chunking
                 cts.Cancel();
             };
 
+            // First message: how to terminate without closing the window
+            Console.WriteLine("Press 'Q' to quit or use Ctrl+C to stop.");
+
             var host = Host.CreateDefaultBuilder(args)
                 .ConfigureLogging(logging =>
                 {
@@ -74,12 +77,13 @@ namespace ErnestAi.Sandbox.Chunking
                 SingleWriter = true
             });
 
-            var recorder = new Recorder(
+            var console = new CompactConsole();
+            var config = Configuration.AppConfig.Default;
+            var streamer = new Streamer(
                 host.Services.GetRequiredService<IAudioProcessor>(),
                 audioChannel.Writer,
-                ChunkMs);
-
-            var console = new CompactConsole();
+                config.Segmenter,
+                console);
 
             var csm = new ConversationStateMachine(
                 WakeWord,
@@ -93,8 +97,30 @@ namespace ErnestAi.Sandbox.Chunking
                 console,
                 transcriptionChannel.Writer);
 
-            console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press Ctrl+C to stop.");
+            console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
             console.WriteSpeechLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
+
+            // Key listener task for graceful termination via single keypress
+            var keyTask = Task.Run(() =>
+            {
+                try
+                {
+                    while (!cts.IsCancellationRequested)
+                    {
+                        if (Console.KeyAvailable)
+                        {
+                            var key = Console.ReadKey(true);
+                            if (key.Key == ConsoleKey.Q || key.Key == ConsoleKey.Escape)
+                            {
+                                cts.Cancel();
+                                break;
+                            }
+                        }
+                        Thread.Sleep(50);
+                    }
+                }
+                catch { /* ignore */ }
+            }, cts.Token);
 
             // CSM consumer loop for transcription items
             var fsmTask = Task.Run(async () =>
@@ -109,10 +135,15 @@ namespace ErnestAi.Sandbox.Chunking
                 catch (OperationCanceledException) { }
             }, cts.Token);
 
-            var recordTask = recorder.RunAsync(cts.Token);
+            var recordTask = streamer.RunAsync(cts.Token);
             var transcribeTask = transcriber.RunAsync(cts.Token);
 
-            await Task.WhenAll(recordTask, transcribeTask, fsmTask);
+            await Task.WhenAll(recordTask, transcribeTask, fsmTask, keyTask);
+
+            // Keep window open after shutdown
+            console.FlushSilence();
+            Console.WriteLine("Stopped. Press any key to close...");
+            try { Console.ReadKey(true); } catch { }
         }
     }
 }
