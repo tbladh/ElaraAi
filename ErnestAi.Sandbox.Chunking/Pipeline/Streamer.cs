@@ -29,6 +29,7 @@ public sealed class Streamer
     private double _sumRms;
     private double _sumActiveRatio;
     private int _metricsFrames;
+    private double _noiseFloorRms; // adaptive noise floor
 
     public Streamer(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, SegmenterConfig cfg, CompactConsole console)
     {
@@ -56,6 +57,9 @@ public sealed class Streamer
         bool inSpeech = false;
         int enterCount = 0;
         int exitCount = 0;
+        long burstHoldUntil = 0; // Environment.TickCount64 deadline to hold speech state
+        bool inBurst = false;     // indicates we entered via burst
+        int burstQuietCount = 0;  // consecutive quiet frames after hold for burst end
 
         // Frame assembly from variable-size input buffers
         byte[] carry = Array.Empty<byte>();
@@ -79,7 +83,7 @@ public sealed class Streamer
                     Buffer.BlockCopy(tmp, offset, frame, 0, frameBytes);
                     offset += frameBytes;
 
-                    AnalyzeFrame(frame, fmt, out double rms, out double activeRatio);
+                    AnalyzeFrame(frame, fmt, out double rms, out double activeRatio, out double peakAbs);
                     // Metrics accumulation
                     if (_cfg.EnableMetrics)
                     {
@@ -87,6 +91,23 @@ public sealed class Streamer
                         _sumActiveRatio += activeRatio;
                         _metricsFrames++;
                     }
+
+                    // Adaptive noise floor update when not in speech
+                    if (_cfg.UseAdaptiveThresholds && !inSpeech)
+                    {
+                        double a = Math.Clamp(_cfg.NoiseFloorAlpha, 0.0001, 1.0);
+                        _noiseFloorRms = (1 - a) * _noiseFloorRms + a * rms;
+                    }
+
+                    // Current thresholds (adaptive if enabled)
+                    double enterRms = _cfg.UseAdaptiveThresholds
+                        ? Math.Max(_cfg.EnterRms, _noiseFloorRms * _cfg.NoiseFloorEnterMultiplier)
+                        : _cfg.EnterRms;
+                    double exitRms = _cfg.UseAdaptiveThresholds
+                        ? Math.Max(_cfg.ExitRms, _noiseFloorRms * _cfg.NoiseFloorExitMultiplier)
+                        : _cfg.ExitRms;
+                    double enterAct = _cfg.EnterActiveRatio;
+                    double exitAct = _cfg.ExitActiveRatio;
 
                     if (!inSpeech)
                     {
@@ -97,10 +118,18 @@ public sealed class Streamer
                             preRing.Enqueue(frame);
                         }
 
-                        if (IsEnter(rms, activeRatio, ref enterCount))
+                        var nowTick = Environment.TickCount64;
+                        bool burstEnter = (_cfg.BurstEnterRms > 0 && rms >= _cfg.BurstEnterRms)
+                                          || (_cfg.BurstPeakAbsThreshold > 0 && peakAbs >= _cfg.BurstPeakAbsThreshold);
+                        if (burstEnter || IsEnter(rms, activeRatio, ref enterCount, enterRms, enterAct))
                         {
                             inSpeech = true;
                             exitCount = 0;
+                            inBurst = burstEnter;
+                            burstQuietCount = 0;
+                            // Hold speech for at least BurstWindowMs to capture very short utterances
+                            if (_cfg.BurstWindowMs > 0)
+                                burstHoldUntil = nowTick + _cfg.BurstWindowMs;
                             // start segment with pre-padding
                             segmentBuffers.Clear();
                             foreach (var f in preRing)
@@ -111,7 +140,20 @@ public sealed class Streamer
                     else
                     {
                         segmentBuffers.Add(frame);
-                        if (IsExit(rms, activeRatio, ref exitCount))
+                        var nowTick2 = Environment.TickCount64;
+                        bool hold = (burstHoldUntil != 0 && nowTick2 < burstHoldUntil);
+
+                        // Track quiet frames for burst end once hold expires
+                        if (inBurst && !hold)
+                        {
+                            if (rms <= exitRms && activeRatio <= exitAct)
+                                burstQuietCount++;
+                            else
+                                burstQuietCount = 0;
+                        }
+
+                        // Normal VAD exit path
+                        if (!hold && IsExit(rms, activeRatio, ref exitCount, exitRms, exitAct))
                         {
                             // Apply implicit post-padding: we already buffered exitCount frames below threshold
                             var ms = segmentBuffers.Count * _cfg.FrameMs;
@@ -123,11 +165,34 @@ public sealed class Streamer
                             inSpeech = false;
                             enterCount = 0;
                             exitCount = 0;
+                            burstHoldUntil = 0;
+                            inBurst = false;
+                            burstQuietCount = 0;
                             segmentBuffers.Clear();
                             preRing.Clear();
                         }
                         else
                         {
+                            // Burst-mode end: after hold window, if we observed enough quiet frames, emit even if VAD not yet met
+                            if (inBurst && !hold)
+                            {
+                                var msDur = segmentBuffers.Count * _cfg.FrameMs;
+                                int burstMin = _cfg.BurstMinSegmentMs > 0 ? _cfg.BurstMinSegmentMs : _cfg.MinSegmentMs;
+                                if (burstQuietCount >= Math.Max(1, _cfg.BurstQuietConsecutive) && msDur >= burstMin)
+                                {
+                                    await EmitSegmentAsync(segmentBuffers, fmt, seq++, token, reason: "burst").ConfigureAwait(false);
+                                    inSpeech = false;
+                                    enterCount = 0;
+                                    exitCount = 0;
+                                    burstHoldUntil = 0;
+                                    inBurst = false;
+                                    burstQuietCount = 0;
+                                    segmentBuffers.Clear();
+                                    preRing.Clear();
+                                    goto ContinueFramesLoop;
+                                }
+                            }
+
                             // Force-flush very long segments
                             var ms = segmentBuffers.Count * _cfg.FrameMs;
                             if (ms >= _cfg.MaxSegmentMs)
@@ -136,12 +201,16 @@ public sealed class Streamer
                                 inSpeech = false;
                                 enterCount = 0;
                                 exitCount = 0;
+                                burstHoldUntil = 0;
+                                inBurst = false;
+                                burstQuietCount = 0;
                                 segmentBuffers.Clear();
                                 preRing.Clear();
                             }
                         }
                         MaybeEmitMetrics(inSpeech);
                     }
+                ContinueFramesLoop: ;
                 }
 
                 // Save leftover
@@ -175,10 +244,13 @@ public sealed class Streamer
         double avgRms = _metricsFrames > 0 ? _sumRms / _metricsFrames : 0.0;
         double avgAct = _metricsFrames > 0 ? _sumActiveRatio / _metricsFrames : 0.0;
 
+        double dynEnter = _cfg.UseAdaptiveThresholds ? Math.Max(_cfg.EnterRms, _noiseFloorRms * _cfg.NoiseFloorEnterMultiplier) : _cfg.EnterRms;
+        double dynExit = _cfg.UseAdaptiveThresholds ? Math.Max(_cfg.ExitRms, _noiseFloorRms * _cfg.NoiseFloorExitMultiplier) : _cfg.ExitRms;
+
         _console.WriteStateLine(
-            $"[METRICS] state={(inSpeech ? "Speech" : "Silence")} avgRms={avgRms:F3} avgAct={avgAct:F3} " +
-            $"enter(rms={_cfg.EnterRms:F3},act={_cfg.EnterActiveRatio:F2},n={_cfg.EnterConsecutive}) " +
-            $"exit(rms={_cfg.ExitRms:F3},act={_cfg.ExitActiveRatio:F2},n={_cfg.ExitConsecutive})");
+            $"[METRICS] state={(inSpeech ? "Speech" : "Silence")} avgRms={avgRms:F3} avgAct={avgAct:F3} noise={_noiseFloorRms:F3} " +
+            $"enter(rms={dynEnter:F3},act={_cfg.EnterActiveRatio:F2},n={_cfg.EnterConsecutive}) " +
+            $"exit(rms={dynExit:F3},act={_cfg.ExitActiveRatio:F2},n={_cfg.ExitConsecutive})");
 
         _lastMetricsTick = now;
         _sumRms = 0;
@@ -186,28 +258,32 @@ public sealed class Streamer
         _metricsFrames = 0;
     }
 
-    private void AnalyzeFrame(byte[] frame, WaveFormat fmt, out double rms, out double activeRatio)
+    private void AnalyzeFrame(byte[] frame, WaveFormat fmt, out double rms, out double activeRatio, out double peakAbs)
     {
         // 16-bit PCM little-endian assumed
         int samples = frame.Length / 2;
-        if (samples == 0) { rms = 0; activeRatio = 0; return; }
+        if (samples == 0) { rms = 0; activeRatio = 0; peakAbs = 0; return; }
 
         long active = 0;
         double sumSq = 0;
+        double peak = 0;
         for (int i = 0; i < samples; i++)
         {
             short s = (short)(frame[2 * i] | (frame[2 * i + 1] << 8));
             double x = s / 32768.0;
             sumSq += x * x;
             if (Math.Abs(x) > _cfg.ActiveSampleAbsThreshold) active++;
+            double ax = Math.Abs(x);
+            if (ax > peak) peak = ax;
         }
         rms = Math.Sqrt(sumSq / samples);
         activeRatio = (double)active / samples;
+        peakAbs = peak;
     }
 
-    private bool IsEnter(double rms, double activeRatio, ref int counter)
+    private bool IsEnter(double rms, double activeRatio, ref int counter, double enterRms, double enterAct)
     {
-        if (rms >= _cfg.EnterRms || activeRatio >= _cfg.EnterActiveRatio)
+        if (rms >= enterRms || activeRatio >= enterAct)
         {
             counter++;
             if (counter >= _cfg.EnterConsecutive) { counter = 0; return true; }
@@ -219,9 +295,9 @@ public sealed class Streamer
         return false;
     }
 
-    private bool IsExit(double rms, double activeRatio, ref int counter)
+    private bool IsExit(double rms, double activeRatio, ref int counter, double exitRms, double exitAct)
     {
-        if (rms <= _cfg.ExitRms && activeRatio <= _cfg.ExitActiveRatio)
+        if (rms <= exitRms && activeRatio <= exitAct)
         {
             counter++;
             if (counter >= _cfg.ExitConsecutive) { counter = 0; return true; }
@@ -239,9 +315,21 @@ public sealed class Streamer
         var ms = new MemoryStream();
         using (var writer = new WaveFileWriter(new IgnoreDisposeStream(ms), fmt))
         {
+            int bytesPerMs = fmt.AverageBytesPerSecond / 1000;
+            int frameBytes = _cfg.FrameMs * bytesPerMs;
             foreach (var f in frames)
             {
                 await writer.WriteAsync(f, 0, f.Length, token).ConfigureAwait(false);
+            }
+            // Explicit post-padding to help STT with short utterances
+            int padFrames = Math.Max(0, _cfg.AppendPaddingMs / _cfg.FrameMs);
+            if (padFrames > 0)
+            {
+                var silence = new byte[frameBytes]; // zeroed
+                for (int i = 0; i < padFrames; i++)
+                {
+                    await writer.WriteAsync(silence, 0, silence.Length, token).ConfigureAwait(false);
+                }
             }
         }
         ms.Position = 0;
