@@ -17,7 +17,7 @@ namespace ErnestAi.Sandbox.Chunking.Speech
     {
         private readonly string _modelFileName;
         private readonly string _modelUrl;
-        private WhisperProcessor? _processor;
+        private WhisperFactory? _factory;
         private readonly SemaphoreSlim _initSemaphore = new(1, 1);
         private bool _isInitialized;
 
@@ -39,10 +39,7 @@ namespace ErnestAi.Sandbox.Chunking.Speech
                 // Ensure model is available in a dedicated sandbox models folder
                 string modelsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "Whisper");
                 string modelPath = await FileDownloader.EnsureInDirectoryAsync(modelsDir, _modelFileName, _modelUrl).ConfigureAwait(false);
-                var factory = WhisperFactory.FromPath(modelPath);
-                _processor = factory.CreateBuilder()
-                    .WithLanguage("en")
-                    .Build();
+                _factory = WhisperFactory.FromPath(modelPath);
 
                 _isInitialized = true;
             }
@@ -56,7 +53,10 @@ namespace ErnestAi.Sandbox.Chunking.Speech
         {
             await InitializeAsync().ConfigureAwait(false);
             string result = string.Empty;
-            await foreach (var segment in _processor!.ProcessAsync(audioStream).ConfigureAwait(false))
+            using var processor = _factory!.CreateBuilder()
+                .WithLanguage("en")
+                .Build();
+            await foreach (var segment in processor.ProcessAsync(audioStream).ConfigureAwait(false))
             {
                 result += segment.Text;
             }
@@ -82,7 +82,8 @@ namespace ErnestAi.Sandbox.Chunking.Speech
                 if (buffer.Length >= 32000) // ~1s at 16kHz 16-bit mono
                 {
                     buffer.Position = 0;
-                    await foreach (var seg in _processor!.ProcessAsync(buffer).ConfigureAwait(false))
+                    using (var processor = _factory!.CreateBuilder().WithLanguage("en").Build())
+                    await foreach (var seg in processor.ProcessAsync(buffer).ConfigureAwait(false))
                     {
                         if (cancellationToken.IsCancellationRequested)
                             yield break;
@@ -102,7 +103,8 @@ namespace ErnestAi.Sandbox.Chunking.Speech
             if (buffer.Length > 0)
             {
                 buffer.Position = 0;
-                await foreach (var seg in _processor!.ProcessAsync(buffer).ConfigureAwait(false))
+                using var processor = _factory!.CreateBuilder().WithLanguage("en").Build();
+                await foreach (var seg in processor.ProcessAsync(buffer).ConfigureAwait(false))
                 {
                     if (cancellationToken.IsCancellationRequested)
                         yield break;
@@ -122,7 +124,7 @@ namespace ErnestAi.Sandbox.Chunking.Speech
 
         public void Dispose()
         {
-            _processor?.Dispose();
+            _factory = null;
             _initSemaphore?.Dispose();
         }
     }

@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
+using NAudio.Wave;
 
 namespace ErnestAi.Sandbox.Chunking;
 
@@ -15,6 +16,7 @@ public sealed class Transcriber
     private bool _inSilenceRun;
 
     private const int MinWords = 1; // relaxed heuristic for sensitivity
+    private const double RmsSilenceThreshold = 0.015; // ~1.5% full scale (tweak as needed)
 
     public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, CompactConsole console, ChannelWriter<TranscriptionItem>? outWriter = null)
     {
@@ -30,7 +32,20 @@ public sealed class Transcriber
         {
             try
             {
-                var text = await _stt.TranscribeAsync(chunk.Stream);
+                // Analyze chunk energy and optionally skip STT on silence
+                var rms = ComputeRms(chunk.Stream);
+                string text;
+                if (rms < RmsSilenceThreshold)
+                {
+                    text = string.Empty;
+                    // Reset position for any downstream readers
+                    if (chunk.Stream.CanSeek) chunk.Stream.Position = 0;
+                }
+                else
+                {
+                    if (chunk.Stream.CanSeek) chunk.Stream.Position = 0; // reset after analysis
+                    text = await _stt.TranscribeAsync(chunk.Stream);
+                }
                 var wordCount = CountWords(text);
                 var meaningful = !string.IsNullOrWhiteSpace(text) && wordCount >= MinWords;
 
@@ -96,5 +111,38 @@ public sealed class Transcriber
         if (string.IsNullOrWhiteSpace(text)) return 0;
         var parts = text.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         return parts.Length;
+    }
+
+    private static double ComputeRms(System.IO.Stream wavStream)
+    {
+        try
+        {
+            if (wavStream.CanSeek) wavStream.Position = 0;
+            using var reader = new WaveFileReader(wavStream);
+            var sp = reader.ToSampleProvider();
+            float[] buffer = new float[reader.WaveFormat.SampleRate];
+            long samples = 0;
+            double sumSquares = 0.0;
+            int read;
+            while ((read = sp.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                for (int i = 0; i < read; i++)
+                {
+                    var s = buffer[i];
+                    sumSquares += s * s;
+                }
+                samples += read;
+            }
+            if (samples == 0) return 0.0;
+            return Math.Sqrt(sumSquares / samples);
+        }
+        catch
+        {
+            return 0.0; // On failure, err on the side of silence
+        }
+        finally
+        {
+            if (wavStream.CanSeek) wavStream.Position = 0;
+        }
     }
 }
