@@ -23,6 +23,7 @@ public sealed class Streamer
     private readonly ChannelWriter<AudioChunk> _writer;
     private readonly SegmenterConfig _cfg;
     private readonly CompactConsole _console;
+    private WaveFileWriter? _sessionWriter; // optional full-session sink
 
     // Metrics accumulators
     private long _lastMetricsTick;
@@ -37,6 +38,15 @@ public sealed class Streamer
         _writer = writer;
         _cfg = cfg;
         _console = console;
+    }
+
+    /// <summary>
+    /// Enable full-session recording by teeing raw input buffers into the provided writer.
+    /// Caller owns the file path; Streamer will dispose the writer on completion.
+    /// </summary>
+    public void SetSessionWriter(WaveFileWriter writer)
+    {
+        _sessionWriter = writer;
     }
 
     public async Task RunAsync(CancellationToken token)
@@ -67,6 +77,12 @@ public sealed class Streamer
         await foreach (var buffer in _audio.GetAudioStreamAsync(token).ConfigureAwait(false))
         {
             if (token.IsCancellationRequested) break;
+
+            // Tee raw buffers to session recorder if enabled
+            if (_sessionWriter != null)
+            {
+                await _sessionWriter.WriteAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false);
+            }
 
             // Append to carry and slice into fixed-size frames
             var tmp = ArrayPool<byte>.Shared.Rent(carry.Length + buffer.Length);
@@ -232,6 +248,8 @@ public sealed class Streamer
         }
 
         _writer.TryComplete();
+        // finalize session writer
+        _sessionWriter?.Dispose();
     }
 
     private void MaybeEmitMetrics(bool inSpeech)

@@ -175,11 +175,24 @@ namespace ErnestAi.Sandbox.Chunking.Audio
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    await bufferAvailable.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        await bufferAvailable.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break; // graceful shutdown
+                    }
 
                     byte[] buffer;
                     lock (bufferQueue)
                     {
+                        if (bufferQueue.Count == 0)
+                        {
+                            // could be a spurious wake due to cancellation
+                            if (cancellationToken.IsCancellationRequested) break;
+                            continue;
+                        }
                         buffer = bufferQueue.Dequeue();
                     }
 

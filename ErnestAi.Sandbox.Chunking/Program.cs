@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using System.IO;
+using System.Text.Json;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
 using ErnestAi.Sandbox.Chunking.Audio;
 using ErnestAi.Sandbox.Chunking.Speech;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ErnestAi.Sandbox.Chunking.Tools;
+using NAudio.Wave;
 
 namespace ErnestAi.Sandbox.Chunking
 {
@@ -100,6 +102,33 @@ namespace ErnestAi.Sandbox.Chunking
             console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
             console.WriteSpeechLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
 
+            // Optional full-session recording (from app start until quit)
+            Console.Write("Record this session to a WAV file and collect transcriptions? (yes/no) ");
+            var recAns = (Console.ReadLine() ?? string.Empty).Trim().ToLowerInvariant();
+            List<TranscriptionItem>? recordedItems = null;
+            string? sessionJsonPath = null;
+            if (recAns == "y" || recAns == "yes")
+            {
+                Console.Write("Scenario folder (e.g., short-wake-word): ");
+                var scenario = (Console.ReadLine() ?? "session").Trim();
+                if (string.IsNullOrWhiteSpace(scenario)) scenario = "session";
+
+                var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
+                var baseDir = Path.Combine(AppContext.BaseDirectory, "SampleRuns", scenario, stamp);
+                Directory.CreateDirectory(baseDir);
+
+                var wavPath = Path.Combine(baseDir, "audio.wav");
+                sessionJsonPath = Path.Combine(baseDir, "expected.json");
+
+                // Create session writer with sandbox segmenter format
+                var fmt = new WaveFormat(config.Segmenter.SampleRate, config.Segmenter.Channels);
+                var sessionWriter = new WaveFileWriter(wavPath, fmt);
+                streamer.SetSessionWriter(sessionWriter);
+
+                recordedItems = new List<TranscriptionItem>(capacity: 256);
+                Console.WriteLine($"[SessionRecord] Writing full session to: {wavPath}");
+            }
+
             // Key listener task for graceful termination via single keypress
             var keyTask = Task.Run(() =>
             {
@@ -130,6 +159,10 @@ namespace ErnestAi.Sandbox.Chunking
                     await foreach (var item in transcriptionChannel.Reader.ReadAllAsync(cts.Token))
                     {
                         csm.HandleTranscription(item);
+                        if (recordedItems != null)
+                        {
+                            recordedItems.Add(item);
+                        }
                     }
                 }
                 catch (OperationCanceledException) { }
@@ -139,6 +172,25 @@ namespace ErnestAi.Sandbox.Chunking
             var transcribeTask = transcriber.RunAsync(cts.Token);
 
             await Task.WhenAll(recordTask, transcribeTask, fsmTask, keyTask);
+
+            // If session recording was enabled, write expected.json from collected transcriptions and settings
+            if (recordedItems != null && sessionJsonPath != null)
+            {
+                var expectedObj = new
+                {
+                    settings = new
+                    {
+                        wakeWord = WakeWord,
+                        segmenter = config.Segmenter,
+                        stt = new { modelFile = SttModelFile, modelUrl = SttModelUrl }
+                    },
+                    transcripts = recordedItems,
+                    tolerances = new { cer = 0.25, wer = 0.4 }
+                };
+                var json = JsonSerializer.Serialize(expectedObj, new JsonSerializerOptions { WriteIndented = true });
+                await File.WriteAllTextAsync(sessionJsonPath, json);
+                Console.WriteLine($"[SessionRecord] Wrote expected.json with {recordedItems.Count} items");
+            }
 
             // Keep window open after shutdown
             console.FlushSilence();

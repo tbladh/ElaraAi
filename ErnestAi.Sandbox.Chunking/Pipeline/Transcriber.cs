@@ -28,81 +28,90 @@ public sealed class Transcriber
 
     public async Task RunAsync(CancellationToken token)
     {
-        await foreach (var chunk in _reader.ReadAllAsync(token))
+        try
         {
-            try
+            await foreach (var chunk in _reader.ReadAllAsync(token))
             {
-                // Analyze chunk energy and optionally skip STT on silence
-                var rms = ComputeRms(chunk.Stream);
-                string text;
-                if (rms < RmsSilenceThreshold)
+                try
                 {
-                    text = string.Empty;
-                    // Reset position for any downstream readers
-                    if (chunk.Stream.CanSeek) chunk.Stream.Position = 0;
-                }
-                else
-                {
-                    if (chunk.Stream.CanSeek) chunk.Stream.Position = 0; // reset after analysis
-                    text = await _stt.TranscribeAsync(chunk.Stream);
-                }
-                var wordCount = CountWords(text);
-                var meaningful = !string.IsNullOrWhiteSpace(text) && wordCount >= MinWords;
-
-                var item = new TranscriptionItem
-                {
-                    Sequence = chunk.Sequence,
-                    TimestampUtc = chunk.TimestampUtc,
-                    Text = text,
-                    IsMeaningful = meaningful,
-                    WordCount = wordCount
-                };
-
-                var stamp = chunk.TimestampUtc.LocalDateTime.ToString("HH:mm:ss");
-                var label = meaningful ? "ok" : "weak";
-
-                if (meaningful)
-                {
-                    // Print speech line (helper ensures newline if needed)
-                    _console.WriteSpeechLine($"[{stamp}] #{chunk.Sequence} ({chunk.DurationMs}ms,{label}): {text}");
-                    _inSilenceRun = false;
-                }
-                else
-                {
-                    // Compact dot for silence (no newline)
-                    _console.WriteSilenceDot();
-                    _inSilenceRun = true;
-                }
-
-                // Publish to downstream pipeline
-                if (_outWriter is not null)
-                {
-                    try
+                    // Analyze chunk energy and optionally skip STT on silence
+                    var rms = ComputeRms(chunk.Stream);
+                    string text;
+                    if (rms < RmsSilenceThreshold)
                     {
-                        await _outWriter.WriteAsync(item, token);
+                        text = string.Empty;
+                        // Reset position for any downstream readers
+                        if (chunk.Stream.CanSeek) chunk.Stream.Position = 0;
                     }
-                    catch (OperationCanceledException) { /* ignore on shutdown */ }
+                    else
+                    {
+                        if (chunk.Stream.CanSeek) chunk.Stream.Position = 0; // reset after analysis
+                        text = await _stt.TranscribeAsync(chunk.Stream);
+                    }
+                    var wordCount = CountWords(text);
+                    var meaningful = !string.IsNullOrWhiteSpace(text) && wordCount >= MinWords;
+
+                    var item = new TranscriptionItem
+                    {
+                        Sequence = chunk.Sequence,
+                        TimestampUtc = chunk.TimestampUtc,
+                        Text = text,
+                        IsMeaningful = meaningful,
+                        WordCount = wordCount
+                    };
+
+                    var stamp = chunk.TimestampUtc.LocalDateTime.ToString("HH:mm:ss");
+                    var label = meaningful ? "ok" : "weak";
+
+                    if (meaningful)
+                    {
+                        // Print speech line (helper ensures newline if needed)
+                        _console.WriteSpeechLine($"[{stamp}] #{chunk.Sequence} ({chunk.DurationMs}ms,{label}): {text}");
+                        _inSilenceRun = false;
+                    }
+                    else
+                    {
+                        // Compact dot for silence (no newline)
+                        _console.WriteSilenceDot();
+                        _inSilenceRun = true;
+                    }
+
+                    // Publish to downstream pipeline
+                    if (_outWriter is not null)
+                    {
+                        try
+                        {
+                            await _outWriter.WriteAsync(item, token);
+                        }
+                        catch (OperationCanceledException) { /* ignore on shutdown */ }
+                    }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _console.WriteSpeechLine($"[Transcriber] Error on chunk #{chunk.Sequence}: {ex.Message}");
-            }
-            finally
-            {
-                await chunk.DisposeAsync();
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _console.WriteSpeechLine($"[Transcriber] Error on chunk #{chunk.Sequence}: {ex.Message}");
+                }
+                finally
+                {
+                    await chunk.DisposeAsync();
+                }
             }
         }
-
-        // Ensure we end with a newline if the last chunks were silence
-        if (_inSilenceRun)
+        catch (OperationCanceledException)
         {
-            _console.FlushSilence();
-            _inSilenceRun = false;
+            // Graceful shutdown: channel enumeration canceled
+        }
+        finally
+        {
+            // Ensure we end with a newline if the last chunks were silence
+            if (_inSilenceRun)
+            {
+                _console.FlushSilence();
+                _inSilenceRun = false;
+            }
         }
     }
 
