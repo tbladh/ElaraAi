@@ -36,6 +36,16 @@ namespace ErnestAi.Sandbox.Chunking
             // First message: how to terminate without closing the window
             Console.WriteLine("Press 'Q' to quit or use Ctrl+C to stop.");
 
+            // Ensure STT model is present BEFORE DI wiring and processing
+            var modelsDirPre = FileSystem.Combine(FileSystem.BaseDirectory, "Models", "Whisper");
+            var modelPathPre = FileSystem.Combine(modelsDirPre, SttModelFile);
+            if (!File.Exists(modelPathPre))
+            {
+                Console.WriteLine($"[STT] Downloading Whisper model '{SttModelFile}'...\n       URL: {SttModelUrl}\n       Path: {modelPathPre}");
+                await FileDownloader.DownloadToFileAsync(modelPathPre, SttModelUrl);
+                Console.WriteLine($"[STT] Model ready: {modelPathPre}");
+            }
+
             var host = Host.CreateDefaultBuilder(args)
                 .ConfigureLogging(logging =>
                 {
@@ -46,23 +56,10 @@ namespace ErnestAi.Sandbox.Chunking
                 {
                     // Minimal concrete implementations
                     services.AddSingleton<IAudioProcessor>(_ => new AudioProcessor());
-                    // Construct STT with desired Whisper model (download handled inside service via Tools)
-                    services.AddSingleton<ISpeechToTextService>(_ =>
-                    {
-                        return new SpeechToTextService(SttModelFile, SttModelUrl);
-                    });
+                    // Construct STT with provided local model path (no downloading in service)
+                    services.AddSingleton<ISpeechToTextService>(_ => new SpeechToTextService(modelPathPre));
                 })
                 .Build();
-
-            // Ensure STT model is present BEFORE starting recording/transcription
-            var modelsDirPre = FileSystem.Combine(FileSystem.BaseDirectory, "Models", "Whisper");
-            var modelPathPre = FileSystem.Combine(modelsDirPre, SttModelFile);
-            if (!File.Exists(modelPathPre))
-            {
-                Console.WriteLine($"[STT] Downloading Whisper model '{SttModelFile}'...\n       URL: {SttModelUrl}\n       Path: {modelPathPre}");
-                await FileDownloader.DownloadToFileAsync(modelPathPre, SttModelUrl);
-                Console.WriteLine($"[STT] Model ready: {modelPathPre}");
-            }
 
             var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(AudioQueueCapacity)
             {
@@ -182,7 +179,7 @@ namespace ErnestAi.Sandbox.Chunking
                     {
                         wakeWord = WakeWord,
                         segmenter = config.Segmenter,
-                        stt = new { modelFile = SttModelFile, modelUrl = SttModelUrl }
+                        stt = new { modelFile = SttModelFile }
                     },
                     transcripts = recordedItems,
                     tolerances = new { cer = 0.25, wer = 0.4 }

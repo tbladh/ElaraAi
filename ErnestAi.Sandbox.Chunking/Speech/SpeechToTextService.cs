@@ -15,16 +15,16 @@ namespace ErnestAi.Sandbox.Chunking.Speech
     /// </summary>
     public sealed class SpeechToTextService : ISpeechToTextService, IDisposable
     {
-        private readonly string _modelFileName;
-        private readonly string _modelUrl;
+        private readonly string _modelPath;
         private WhisperFactory? _factory;
         private readonly SemaphoreSlim _initSemaphore = new(1, 1);
         private bool _isInitialized;
 
-        public SpeechToTextService(string modelFileName, string modelUrl)
+        public SpeechToTextService(string modelPath)
         {
-            _modelFileName = modelFileName;
-            _modelUrl = modelUrl;
+            if (string.IsNullOrWhiteSpace(modelPath))
+                throw new ArgumentException("Model path must be provided", nameof(modelPath));
+            _modelPath = modelPath;
         }
 
         private async Task InitializeAsync()
@@ -34,15 +34,13 @@ namespace ErnestAi.Sandbox.Chunking.Speech
             {
                 if (_isInitialized) return;
 
-                // Verify model presence in sandbox models folder; fatal if missing
-                string modelsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "Whisper");
-                string modelPath = Path.Combine(modelsDir, _modelFileName);
-                if (!File.Exists(modelPath))
+                // Verify model presence at provided path; fatal if missing
+                if (!File.Exists(_modelPath))
                 {
                     throw new FileNotFoundException(
-                        $"Whisper model not found: '{modelPath}'. Pre-download is required at the composition root.");
+                        $"Whisper model not found: '{_modelPath}'. Pre-download is required at the composition root.");
                 }
-                _factory = WhisperFactory.FromPath(modelPath);
+                _factory = WhisperFactory.FromPath(_modelPath);
 
                 _isInitialized = true;
             }

@@ -1,0 +1,62 @@
+{
+  "settings": {
+    "wakeWord": "anna",
+    "segmenter": {
+      "SampleRate": 16000,
+      "Channels": 1,
+      "FrameMs": 20,
+      "EnterRms": 0.015,
+      "EnterActiveRatio": 0.1,
+      "ExitRms": 0.01,
+      "ExitActiveRatio": 0.05,
+      "EnterConsecutive": 2,
+      "ExitConsecutive": 8,
+      "PrependPaddingMs": 300,
+      "AppendPaddingMs": 400,
+      "MinSegmentMs": 500,
+      "MaxSegmentMs": 12000,
+      "ActiveSampleAbsThreshold": 0.02,
+      "BurstEnterRms": 0.06,
+      "BurstWindowMs": 500,
+      "BurstMinSegmentMs": 300,
+      "BurstQuietConsecutive": 4,
+      "UseAdaptiveThresholds": true,
+      "NoiseFloorAlpha": 0.02,
+      "NoiseFloorEnterMultiplier": 3,
+      "NoiseFloorExitMultiplier": 1.5,
+      "BurstPeakAbsThreshold": 0.2,
+      "EnableMetrics": true,
+      "MetricsIntervalMs": 1000
+    },
+    "stt": {
+      "modelFile": "ggml-medium.en.bin"
+    }
+  },
+  "transcripts": [
+    {
+      "Sequence": 0,
+      "TimestampUtc": "2025-08-16T13:18:45.5944524+00:00",
+      "Text": "Anna.",
+      "IsMeaningful": true,
+      "WordCount": 1
+    },
+    {
+      "Sequence": 1,
+      "TimestampUtc": "2025-08-16T13:18:50.6937397+00:00",
+      "Text": "Tell me something.",
+      "IsMeaningful": true,
+      "WordCount": 3
+    },
+    {
+      "Sequence": 2,
+      "TimestampUtc": "2025-08-16T13:18:57.0925948+00:00",
+      "Text": "Anna.",
+      "IsMeaningful": true,
+      "WordCount": 1
+    }
+  ],
+  "tolerances": {
+    "cer": 0.25,
+    "wer": 0.4
+  }
+}

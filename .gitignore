@@ -446,7 +446,6 @@ ggml-*.bin
 whisper-*.bin
 
 # Audio files (temporary and test files)
-*.wav
 *.mp3
 *.m4a
 *.flac
