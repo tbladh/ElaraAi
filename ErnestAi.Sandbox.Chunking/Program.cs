@@ -18,7 +18,7 @@ namespace ErnestAi.Sandbox.Chunking
         private const int ChunkMs = 3000;         // 3 seconds per chunk (better context)
         private const int AudioQueueCapacity = 16;
         private const string WakeWord = "anna"; // simple wake word for sandbox
-        private const int ProcessingSilenceSeconds = 5;  // after 5s of silence, enter processing
+        private const int ProcessingSilenceSeconds = 8;  // after 5s of silence, enter processing
         private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
         private const string SttModelFile = "ggml-medium.en.bin";
         private const string SttModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin";
