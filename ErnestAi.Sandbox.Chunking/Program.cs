@@ -36,9 +36,9 @@ namespace ErnestAi.Sandbox.Chunking
             // First message: how to terminate without closing the window
             Console.WriteLine("Press 'Q' to quit or use Ctrl+C to stop.");
 
-            // Ensure STT model is present BEFORE DI wiring and processing
-            var modelsDirPre = FileSystem.Combine(FileSystem.BaseDirectory, "Models", "Whisper");
-            var modelPathPre = FileSystem.Combine(modelsDirPre, SttModelFile);
+            // Ensure STT model is present BEFORE DI wiring and processing (use cross-platform cache dir)
+            var modelsDirPre = await AppPaths.GetModelCacheDirAsync();
+            var modelPathPre = Path.Combine(modelsDirPre, SttModelFile);
             if (!File.Exists(modelPathPre))
             {
                 Console.WriteLine($"[STT] Downloading Whisper model '{SttModelFile}'...\n       URL: {SttModelUrl}\n       Path: {modelPathPre}");

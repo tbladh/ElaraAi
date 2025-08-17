@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ErnestAi.Sandbox.Chunking.Speech;
+using ErnestAi.Sandbox.Chunking.Tools;
 
 namespace ErnestAi.Sandbox.Chunking.UnitTests
 {
@@ -65,9 +66,8 @@ namespace ErnestAi.Sandbox.Chunking.UnitTests
                 PropertyNameCaseInsensitive = true
             })!;
 
-            // Ensure model is available in test output under Models/Whisper
-            var outModelsDir = Path.Combine(AppContext.BaseDirectory, "Models", "Whisper");
-            Directory.CreateDirectory(outModelsDir);
+            // Ensure model is available in cross-platform cache directory
+            var outModelsDir = AppPaths.GetModelCacheDir();
             var modelFile = expected.settings.stt.modelFile ?? string.Empty;
             var dstModelPath = Path.Combine(outModelsDir, modelFile);
 
