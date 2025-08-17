@@ -165,10 +165,24 @@ namespace ErnestAi.Sandbox.Chunking
                 catch (OperationCanceledException) { }
             }, cts.Token);
 
+            // Lightweight ticker to advance silence timers even when no new items arrive
+            var tickerTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!cts.IsCancellationRequested)
+                    {
+                        csm.Tick(DateTimeOffset.UtcNow);
+                        await Task.Delay(200, cts.Token);
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }, cts.Token);
+
             var recordTask = streamer.RunAsync(cts.Token);
             var transcribeTask = transcriber.RunAsync(cts.Token);
 
-            await Task.WhenAll(recordTask, transcribeTask, fsmTask, keyTask);
+            await Task.WhenAll(recordTask, transcribeTask, fsmTask, tickerTask, keyTask);
 
             // If session recording was enabled, write expected.json from collected transcriptions and settings
             if (recordedItems != null && sessionJsonPath != null)

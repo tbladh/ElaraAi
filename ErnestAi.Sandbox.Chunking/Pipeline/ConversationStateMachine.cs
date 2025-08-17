@@ -12,6 +12,7 @@ public sealed class ConversationStateMachine
     public TimeSpan ProcessingSilence { get; }
     public TimeSpan EndSilence { get; }
     private readonly CompactConsole _console;
+    private readonly object _sync = new();
 
     public DateTimeOffset? ListeningSince { get; private set; }
     public DateTimeOffset? LastHeardAt { get; private set; }
@@ -25,37 +26,55 @@ public sealed class ConversationStateMachine
         _console = console;
     }
 
+    /// <summary>
+    /// Periodic tick to advance silence timers when no new transcription items arrive.
+    /// Safe to call from a background timer.
+    /// </summary>
+    public void Tick(DateTimeOffset nowUtc)
+    {
+        lock (_sync)
+        {
+            if (Mode == ConversationMode.Listening)
+            {
+                EvaluateSilence(nowUtc);
+            }
+        }
+    }
+
     public void HandleTranscription(DateTimeOffset timestampUtc, string? text, bool meaningful)
     {
-        text ??= string.Empty;
-        var lower = text.ToLowerInvariant();
-        var hasWake = !string.IsNullOrWhiteSpace(WakeWord) && lower.Contains(WakeWord.ToLowerInvariant());
-
-        switch (Mode)
+        lock (_sync)
         {
-            case ConversationMode.Quiescent:
-                if (hasWake)
-                {
-                    TransitionToListening(timestampUtc, reason: $"wake word '{WakeWord}' detected");
-                }
-                break;
+            text ??= string.Empty;
+            var lower = text.ToLowerInvariant();
+            var hasWake = !string.IsNullOrWhiteSpace(WakeWord) && lower.Contains(WakeWord.ToLowerInvariant());
 
-            case ConversationMode.Listening:
-                if (meaningful)
-                {
-                    // Any speech resets processing flag
-                    var wasProcessing = IsProcessing;
-                    LastHeardAt = timestampUtc;
-                    if (wasProcessing)
+            switch (Mode)
+            {
+                case ConversationMode.Quiescent:
+                    if (hasWake)
                     {
-                        IsProcessing = false;
-                        Log($"Processing -> Listening (speech resumed)");
+                        TransitionToListening(timestampUtc, reason: $"wake word '{WakeWord}' detected");
                     }
-                }
+                    break;
 
-                // Evaluate silence windows
-                EvaluateSilence(timestampUtc);
-                break;
+                case ConversationMode.Listening:
+                    if (meaningful)
+                    {
+                        // Any speech resets processing flag
+                        var wasProcessing = IsProcessing;
+                        LastHeardAt = timestampUtc;
+                        if (wasProcessing)
+                        {
+                            IsProcessing = false;
+                            Log($"Processing -> Listening (speech resumed)");
+                        }
+                    }
+
+                    // Evaluate silence windows
+                    EvaluateSilence(timestampUtc);
+                    break;
+            }
         }
     }
 
