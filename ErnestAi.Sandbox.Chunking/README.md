@@ -1,3 +1,11 @@
+## Unit tests: Sample runs and model handling
+
+- Tests live in `ErnestAi.Sandbox.Chunking.UnitTests/` and discover scenarios in `SampleRuns/<scenario>/` that contain `audio.wav` and `expected.json`.
+- Tests ensure the Whisper model is present in the same cross-platform cache directory (`Tools/AppPaths.cs`). If missing, they:
+  - Attempt to copy the model from `ErnestAi.Sandbox.Chunking/Models/Whisper/` in the repo.
+  - If still missing and the scenario provides a `modelUrl` in `expected.json`, download it there.
+- Each test constructs `SpeechToTextService` with the local model path.
+
 # ErnestAi.Sandbox.Chunking
 
 A minimal, isolated console sandbox to prototype a chunked audio pipeline:
@@ -10,7 +18,7 @@ This project is the embryo for a modular, queue-driven architecture that will la
 
 ## Pipeline overview
 
-- Recorder reads microphone input and emits `AudioChunk` items.
+- Streamer reads microphone input, segments with simple VAD, and emits `AudioChunk` items.
 - Transcriber consumes `AudioChunk`, performs STT, and emits `TranscriptionItem` items.
 - ConversationStateMachine (CSM) consumes `TranscriptionItem` items, manages session state (quiescent/listening/processing), and prints the aggregated session prompt on end-of-session.
 
@@ -19,7 +27,7 @@ This project is the embryo for a modular, queue-driven architecture that will la
 ```mermaid
 flowchart LR
     subgraph Program.cs [Composition Root]
-      A[Recorder] -->|AudioChunk| AC[(Channel<AudioChunk>)]
+      A[Streamer] -->|AudioChunk| AC[(Channel<AudioChunk>)]
       AC --> B[Transcriber]
       B -->|TranscriptionItem| TC[(Channel<TranscriptionItem>)]
       TC --> C[ConversationStateMachine]
@@ -28,9 +36,9 @@ flowchart LR
 
 ## Key components and files
 
-- Recorder: `Pipeline/Recorder.cs`
-  - Emits `AudioChunk` to a bounded channel (capacity configurable).
-  - Owns and disposes the chunk stream.
+- Streamer: `Pipeline/Streamer.cs`
+  - Continuously captures mic audio, performs simple VAD segmentation, and emits `AudioChunk` to a bounded channel.
+  - Supports pre/post padding and optional full-session WAV recording.
 
 - Transcriber: `Pipeline/Transcriber.cs`
   - Consumes `AudioChunk`, calls `ISpeechToTextService.TranscribeAsync(stream)`.
@@ -40,6 +48,7 @@ flowchart LR
 - ConversationStateMachine: `Pipeline/ConversationStateMachine.cs`
   - Consumes `TranscriptionItem` from the channel (via a reader loop started in `Program.cs`).
   - Transitions: Quiescent → Listening (wake word), Listening ↔ Processing (silence threshold), Listening → Quiescent (extended silence).
+  - A lightweight background ticker in `Program.cs` periodically calls `ConversationStateMachine.Tick(...)` so silence windows advance even when no new items arrive.
   - Buffers meaningful items during a session; on end-of-session prints an aggregated prompt.
 
 - Contracts: `Core/Interfaces/*.cs`
@@ -48,18 +57,20 @@ flowchart LR
 - Implementations: `Audio/AudioProcessor.cs`, `Speech/SpeechToTextService.cs`
   - Minimal, single-responsibility classes used by the sandbox.
 
-- Utilities: `Tools/FileSystem.cs`, `Tools/FileDownloader.cs`
+- Utilities: `Tools/FileSystem.cs`, `Tools/FileDownloader.cs`, `Tools/AppPaths.cs`
   - Simple static helpers used at the composition root (see Philosophy below).
+  - `AppPaths` provides cross-platform cache directories for models.
 
 ## Execution flow (high level)
 
 1) `Program.cs` wires the pipeline:
    - Creates `Channel<AudioChunk>` and `Channel<TranscriptionItem>`.
-   - Prepares Whisper STT model on disk (downloads once if missing).
+   - Prepares Whisper STT model on disk in a cross-platform cache (downloads once if missing).
    - Registers concrete services, then starts three tasks:
-     - `Recorder.RunAsync()` produces audio chunks.
+     - `Streamer.RunAsync()` produces audio chunks (segmented).
      - `Transcriber.RunAsync()` transcribes chunks and produces transcription items.
      - CSM consumer loop reads `TranscriptionItem` and drives state + aggregation.
+     - A background ticker advances CSM silence windows.
 
 2) On wake word detection, CSM enters Listening.
 
@@ -82,6 +93,9 @@ flowchart LR
   - `Tools/FileDownloader.cs`:
     - Async: `EnsureFileAsync`, `EnsureInDirectoryAsync`, `DownloadToFileAsync`
     - Sync:  `EnsureFile`, `EnsureInDirectory`, `DownloadToFile`
+  - `Tools/AppPaths.cs`:
+    - Async: `GetCacheRootAsync()`, `GetModelCacheDirAsync()`
+    - Sync:  `GetCacheRoot()`, `GetModelCacheDir()`
   - `Tools/FileSystem.cs` is intentionally simple and synchronous for path operations.
 
 ## AI models working on the project (philosophies)
@@ -98,6 +112,10 @@ This sandbox prototypes the ingestion side. The broader ErnestAI project follows
 Sandbox specifics related to STT:
 - Uses Whisper (CPU) with a small English model (e.g., `ggml-base.en.bin`).
 - Model path is prepared in `Program.cs` using `Tools.FileDownloader` and passed into `SpeechToTextService` (the service does not download).
+- The model is stored in an OS-standard cache location from `Tools/AppPaths.cs`:
+  - Windows: `%LocalAppData%/ErnestAi/Cache/Models/Whisper`
+  - macOS: `~/Library/Caches/ErnestAi/Models/Whisper`
+  - Linux: `$XDG_CACHE_HOME/ErnestAi/Models/Whisper` or `~/.cache/ErnestAi/Models/Whisper`
 
 Future integration (outside this sandbox):
 - Aggregate the session text into a prompt and forward to a language model service (e.g., Ollama), then synthesize a response with TTS.
@@ -105,7 +123,7 @@ Future integration (outside this sandbox):
 ## Getting started
 
 - Prerequisites: .NET 8 SDK, microphone access.
-- First run will download the Whisper model to a `Models/Whisper/` folder alongside the app base directory (overwrites if re-downloaded).
+- First run will download the Whisper model to the cross-platform cache directory shown above.
 - Build and run from your preferred environment. The user prefers to run builds manually.
 
 Once running:
