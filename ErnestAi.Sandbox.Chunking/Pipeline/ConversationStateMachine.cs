@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ErnestAi.Sandbox.Chunking.Logging;
 
 namespace ErnestAi.Sandbox.Chunking;
 // TODO: Should handle maximum rambling cut-off (e.g., user keeps talking without pause).
@@ -12,18 +13,21 @@ public sealed class ConversationStateMachine
     public TimeSpan ProcessingSilence { get; }
     public TimeSpan EndSilence { get; }
     private readonly CompactConsole _console;
+    private readonly ILog _log;
     private readonly object _sync = new();
 
     public DateTimeOffset? ListeningSince { get; private set; }
     public DateTimeOffset? LastHeardAt { get; private set; }
     private readonly List<TranscriptionItem> _buffer = new();
 
-    public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, CompactConsole console)
+    public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, CompactConsole console, ILog log)
     {
         WakeWord = wakeWord ?? string.Empty;
         ProcessingSilence = processingSilence;
         EndSilence = endSilence;
         _console = console;
+        _log = log;
+        _log.Info("reporting in");
     }
 
     /// <summary>
@@ -130,6 +134,8 @@ public sealed class ConversationStateMachine
             var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
             var stamp = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
             _console.WriteStateLine($"[{stamp}] [SESSION] Prompt: {joined}");
+            // Also emit via injected logger for file + console subscriber
+            _log.Info($"Prompt: {joined}");
         }
 
         Mode = ConversationMode.Quiescent;
@@ -144,5 +150,7 @@ public sealed class ConversationStateMachine
     {
         var stamp = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
         _console.WriteStateLine($"[{stamp}] [STATE] {message}");
+        // File-backed log with source prefix via injected logger
+        _log.Info(message);
     }
 }

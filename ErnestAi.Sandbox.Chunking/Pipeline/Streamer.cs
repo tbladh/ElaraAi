@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -10,6 +11,7 @@ using ErnestAi.Sandbox.Chunking.Configuration;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
 using NAudio.Utils;
 using NAudio.Wave;
+using ErnestAi.Sandbox.Chunking.Logging;
 
 namespace ErnestAi.Sandbox.Chunking;
 
@@ -23,6 +25,7 @@ public sealed class Streamer
     private readonly ChannelWriter<AudioChunk> _writer;
     private readonly SegmenterConfig _cfg;
     private readonly CompactConsole _console;
+    private readonly ILog _log;
     private WaveFileWriter? _sessionWriter; // optional full-session sink
 
     // Metrics accumulators
@@ -32,12 +35,14 @@ public sealed class Streamer
     private int _metricsFrames;
     private double _noiseFloorRms; // adaptive noise floor
 
-    public Streamer(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, SegmenterConfig cfg, CompactConsole console)
+    public Streamer(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, SegmenterConfig cfg, CompactConsole console, ILog log)
     {
         _audio = audio;
         _writer = writer;
         _cfg = cfg;
         _console = console;
+        _log = log;
+        _log.Info("reporting in");
     }
 
     /// <summary>
@@ -265,10 +270,9 @@ public sealed class Streamer
         double dynEnter = _cfg.UseAdaptiveThresholds ? Math.Max(_cfg.EnterRms, _noiseFloorRms * _cfg.NoiseFloorEnterMultiplier) : _cfg.EnterRms;
         double dynExit = _cfg.UseAdaptiveThresholds ? Math.Max(_cfg.ExitRms, _noiseFloorRms * _cfg.NoiseFloorExitMultiplier) : _cfg.ExitRms;
 
-        _console.WriteStateLine(
-            $"[METRICS] state={(inSpeech ? "Speech" : "Silence")} avgRms={avgRms:F3} avgAct={avgAct:F3} noise={_noiseFloorRms:F3} " +
-            $"enter(rms={dynEnter:F3},act={_cfg.EnterActiveRatio:F2},n={_cfg.EnterConsecutive}) " +
-            $"exit(rms={dynExit:F3},act={_cfg.ExitActiveRatio:F2},n={_cfg.ExitConsecutive})");
+        // Emit as one-line JSON for metrics consumers
+        var json = string.Create(CultureInfo.InvariantCulture, $"{{\"type\":\"metrics\",\"state\":\"{(inSpeech ? "Speech" : "Silence")}\",\"avgRms\":{avgRms:F3},\"avgAct\":{avgAct:F3},\"noise\":{_noiseFloorRms:F3},\"enter\":{{\"rms\":{dynEnter:F3},\"act\":{_cfg.EnterActiveRatio:F2},\"n\":{_cfg.EnterConsecutive}}},\"exit\":{{\"rms\":{dynExit:F3},\"act\":{_cfg.ExitActiveRatio:F2},\"n\":{_cfg.ExitConsecutive}}}}}");
+        _log.Metrics(json);
 
         _lastMetricsTick = now;
         _sumRms = 0;
@@ -366,10 +370,11 @@ public sealed class Streamer
         }
         else
         {
-            _console.WriteSilenceDot(); // compact UI feedback
+            _console.WriteSilenceDot(); // compact UI feedback remains
             if (_cfg.EnableMetrics)
             {
-                _console.WriteStateLine($"[SEGMENT] seq={seq} ms={chunk.DurationMs} frames={frames.Count} reason={reason}");
+                var json = string.Create(CultureInfo.InvariantCulture, $"{{\"type\":\"segment\",\"seq\":{seq},\"ms\":{chunk.DurationMs},\"frames\":{frames.Count},\"reason\":\"{reason}\"}}");
+                _log.Metrics(json);
             }
         }
     }

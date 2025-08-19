@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
+using ErnestAi.Sandbox.Chunking.Logging;
 using NAudio.Wave;
 
 namespace ErnestAi.Sandbox.Chunking;
@@ -13,17 +14,20 @@ public sealed class Transcriber
     private readonly ChannelReader<AudioChunk> _reader;
     private readonly ChannelWriter<TranscriptionItem>? _outWriter;
     private readonly CompactConsole _console;
+    private readonly ILog _log;
     private bool _inSilenceRun;
 
     private const int MinWords = 1; // relaxed heuristic for sensitivity
     private const double RmsSilenceThreshold = 0.015; // ~1.5% full scale (tweak as needed)
 
-    public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, CompactConsole console, ChannelWriter<TranscriptionItem>? outWriter = null)
+    public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, CompactConsole console, ChannelWriter<TranscriptionItem>? outWriter = null, ILog? log = null)
     {
         _stt = stt;
         _reader = reader;
         _outWriter = outWriter;
         _console = console;
+        _log = log ?? new ComponentLogger("Transcriber");
+        _log.Info("reporting in");
     }
 
     public async Task RunAsync(CancellationToken token)
@@ -93,6 +97,7 @@ public sealed class Transcriber
                 catch (Exception ex)
                 {
                     _console.WriteSpeechLine($"[Transcriber] Error on chunk #{chunk.Sequence}: {ex.Message}");
+                    _log.Error($"Error on chunk #{chunk.Sequence}: {ex.Message}");
                 }
                 finally
                 {

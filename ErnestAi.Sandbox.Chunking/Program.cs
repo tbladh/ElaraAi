@@ -9,6 +9,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ErnestAi.Sandbox.Chunking.Tools;
 using NAudio.Wave;
+using ErnestAi.Sandbox.Chunking.Logging;
+using LoggingLevel = ErnestAi.Sandbox.Chunking.Logging.LogLevel;
 
 namespace ErnestAi.Sandbox.Chunking
 {
@@ -20,7 +22,7 @@ namespace ErnestAi.Sandbox.Chunking
         private const string WakeWord = "anna"; // simple wake word for sandbox
         private const int ProcessingSilenceSeconds = 8;  // after 5s of silence, enter processing
         private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
-        private const string SttModelFile = "ggml-base.en.bin";
+        private const string SttModelFile = "ggml-medium.en.bin";
         private const string SttModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin";
 
         private static async Task Main(string[] args)
@@ -33,17 +35,27 @@ namespace ErnestAi.Sandbox.Chunking
                 cts.Cancel();
             };
 
+            // Configure logging (file + console subscriber)
+            var logDir = Path.Combine(AppContext.BaseDirectory, "Logs");
+            Directory.CreateDirectory(logDir);
+            var logFile = Path.Combine(logDir, $"sandbox-{DateTimeOffset.Now:yyyyMMdd}.log");
+            Logger.Configure(logFile, LoggingLevel.Debug); // allow debug by default
+            Logger.OnLog += (evt) =>
+            {
+                ConsoleColorizer.WithColorFor(evt.Source, evt.Level, () => Console.WriteLine(evt.ToString()));
+            };
+
             // First message: how to terminate without closing the window
-            Console.WriteLine("Press 'Q' to quit or use Ctrl+C to stop.");
+            Logger.Info("Program", "Press 'Q' to quit or use Ctrl+C to stop.");
 
             // Ensure STT model is present BEFORE DI wiring and processing (use cross-platform cache dir)
             var modelsDirPre = await AppPaths.GetModelCacheDirAsync();
             var modelPathPre = Path.Combine(modelsDirPre, SttModelFile);
             if (!File.Exists(modelPathPre))
             {
-                Console.WriteLine($"[STT] Downloading Whisper model '{SttModelFile}'...\n       URL: {SttModelUrl}\n       Path: {modelPathPre}");
+                Logger.Info("STT", $"Downloading Whisper model '{SttModelFile}'... URL: {SttModelUrl} Path: {modelPathPre}");
                 await FileDownloader.DownloadToFileAsync(modelPathPre, SttModelUrl);
-                Console.WriteLine($"[STT] Model ready: {modelPathPre}");
+                Logger.Info("STT", $"Model ready: {modelPathPre}");
             }
 
             var host = Host.CreateDefaultBuilder(args)
@@ -60,6 +72,8 @@ namespace ErnestAi.Sandbox.Chunking
                     services.AddSingleton<ISpeechToTextService>(_ => new SpeechToTextService(modelPathPre));
                 })
                 .Build();
+
+            Logger.Debug("Program", "Host built and services configured.");
 
             var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(AudioQueueCapacity)
             {
@@ -82,22 +96,26 @@ namespace ErnestAi.Sandbox.Chunking
                 host.Services.GetRequiredService<IAudioProcessor>(),
                 audioChannel.Writer,
                 config.Segmenter,
-                console);
+                console,
+                new ComponentLogger("Streamer"));
 
             var csm = new ConversationStateMachine(
                 WakeWord,
                 TimeSpan.FromSeconds(ProcessingSilenceSeconds),
                 TimeSpan.FromSeconds(EndSilenceSeconds),
-                console);
+                console,
+                new ComponentLogger("Conversation"));
 
             var transcriber = new Transcriber(
                 host.Services.GetRequiredService<ISpeechToTextService>(),
                 audioChannel.Reader,
                 console,
-                transcriptionChannel.Writer);
+                transcriptionChannel.Writer,
+                new ComponentLogger("Transcriber"));
 
             console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
             console.WriteSpeechLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
+            Logger.Info("Program", $"Configured wake word='{WakeWord}', processingSilence={ProcessingSilenceSeconds}s, endSilence={EndSilenceSeconds}s.");
 
             // Optional full-session recording (from app start until quit)
             Console.Write("Record this session to a WAV file and collect transcriptions? (yes/no) ");
@@ -123,7 +141,7 @@ namespace ErnestAi.Sandbox.Chunking
                 streamer.SetSessionWriter(sessionWriter);
 
                 recordedItems = new List<TranscriptionItem>(capacity: 256);
-                Console.WriteLine($"[SessionRecord] Writing full session to: {wavPath}");
+                Logger.Info("Recorder", $"Writing full session to: {wavPath}");
             }
 
             // Key listener task for graceful termination via single keypress
@@ -182,6 +200,7 @@ namespace ErnestAi.Sandbox.Chunking
             var recordTask = streamer.RunAsync(cts.Token);
             var transcribeTask = transcriber.RunAsync(cts.Token);
 
+            Logger.Debug("Program", "Tasks started: recorder, transcriber, FSM consumer, ticker, key listener.");
             await Task.WhenAll(recordTask, transcribeTask, fsmTask, tickerTask, keyTask);
 
             // If session recording was enabled, write expected.json from collected transcriptions and settings
@@ -200,12 +219,12 @@ namespace ErnestAi.Sandbox.Chunking
                 };
                 var json = JsonSerializer.Serialize(expectedObj, new JsonSerializerOptions { WriteIndented = true });
                 await File.WriteAllTextAsync(sessionJsonPath, json);
-                Console.WriteLine($"[SessionRecord] Wrote expected.json with {recordedItems.Count} items");
+                Logger.Info("Recorder", $"Wrote expected.json with {recordedItems.Count} items");
             }
 
             // Keep window open after shutdown
             console.FlushSilence();
-            Console.WriteLine("Stopped. Press any key to close...");
+            Logger.Info("Program", "Stopped. Press any key to close...");
             try { Console.ReadKey(true); } catch { }
         }
     }

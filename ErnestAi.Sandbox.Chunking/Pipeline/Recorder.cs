@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using ErnestAi.Sandbox.Chunking.Core.Interfaces;
+using ErnestAi.Sandbox.Chunking.Logging;
 
 namespace ErnestAi.Sandbox.Chunking;
 
@@ -11,12 +12,15 @@ public sealed class Recorder
     private readonly IAudioProcessor _audio;
     private readonly ChannelWriter<AudioChunk> _writer;
     private readonly int _chunkMs;
+    private readonly ILog _log;
 
-    public Recorder(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, int chunkMs)
+    public Recorder(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, int chunkMs, ILog log)
     {
         _audio = audio;
         _writer = writer;
         _chunkMs = chunkMs;
+        _log = log;
+        _log.Info("reporting in");
     }
 
     public async Task RunAsync(CancellationToken token)
