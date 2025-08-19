@@ -13,19 +13,17 @@ public sealed class Transcriber
     private readonly ISpeechToTextService _stt;
     private readonly ChannelReader<AudioChunk> _reader;
     private readonly ChannelWriter<TranscriptionItem>? _outWriter;
-    private readonly CompactConsole _console;
     private readonly ILog _log;
     private bool _inSilenceRun;
 
     private const int MinWords = 1; // relaxed heuristic for sensitivity
     private const double RmsSilenceThreshold = 0.015; // ~1.5% full scale (tweak as needed)
 
-    public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, CompactConsole console, ChannelWriter<TranscriptionItem>? outWriter = null, ILog? log = null)
+    public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, ChannelWriter<TranscriptionItem>? outWriter = null, ILog? log = null)
     {
         _stt = stt;
         _reader = reader;
         _outWriter = outWriter;
-        _console = console;
         _log = log ?? new ComponentLogger("Transcriber");
         _log.Info("reporting in");
     }
@@ -69,14 +67,12 @@ public sealed class Transcriber
 
                     if (meaningful)
                     {
-                        // Print speech line (helper ensures newline if needed)
-                        _console.WriteSpeechLine($"[{stamp}] #{chunk.Sequence} ({chunk.DurationMs}ms,{label}): {text}");
+                        _log.Info($"#{chunk.Sequence} ({chunk.DurationMs}ms,{label}): {text}");
                         _inSilenceRun = false;
                     }
                     else
                     {
-                        // Compact dot for silence (no newline)
-                        _console.WriteSilenceDot();
+                        // no console output for silence in service; optionally could emit Debug
                         _inSilenceRun = true;
                     }
 
@@ -96,7 +92,6 @@ public sealed class Transcriber
                 }
                 catch (Exception ex)
                 {
-                    _console.WriteSpeechLine($"[Transcriber] Error on chunk #{chunk.Sequence}: {ex.Message}");
                     _log.Error($"Error on chunk #{chunk.Sequence}: {ex.Message}");
                 }
                 finally
@@ -111,12 +106,7 @@ public sealed class Transcriber
         }
         finally
         {
-            // Ensure we end with a newline if the last chunks were silence
-            if (_inSilenceRun)
-            {
-                _console.FlushSilence();
-                _inSilenceRun = false;
-            }
+            _inSilenceRun = false;
         }
     }
 

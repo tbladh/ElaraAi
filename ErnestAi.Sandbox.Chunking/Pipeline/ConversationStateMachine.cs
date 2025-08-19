@@ -12,7 +12,6 @@ public sealed class ConversationStateMachine
     public string WakeWord { get; }
     public TimeSpan ProcessingSilence { get; }
     public TimeSpan EndSilence { get; }
-    private readonly CompactConsole _console;
     private readonly ILog _log;
     private readonly object _sync = new();
 
@@ -20,12 +19,11 @@ public sealed class ConversationStateMachine
     public DateTimeOffset? LastHeardAt { get; private set; }
     private readonly List<TranscriptionItem> _buffer = new();
 
-    public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, CompactConsole console, ILog log)
+    public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, ILog log)
     {
         WakeWord = wakeWord ?? string.Empty;
         ProcessingSilence = processingSilence;
         EndSilence = endSilence;
-        _console = console;
         _log = log;
         _log.Info("reporting in");
     }
@@ -132,9 +130,7 @@ public sealed class ConversationStateMachine
         if (_buffer.Count > 0)
         {
             var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
-            var stamp = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
-            _console.WriteStateLine($"[{stamp}] [SESSION] Prompt: {joined}");
-            // Also emit via injected logger for file + console subscriber
+            // Emit via injected logger for file + console subscriber
             _log.Info($"Prompt: {joined}");
         }
 
@@ -148,8 +144,6 @@ public sealed class ConversationStateMachine
 
     private void Log(string message)
     {
-        var stamp = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
-        _console.WriteStateLine($"[{stamp}] [STATE] {message}");
         // File-backed log with source prefix via injected logger
         _log.Info(message);
     }

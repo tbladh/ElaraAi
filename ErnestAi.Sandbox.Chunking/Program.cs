@@ -90,31 +90,27 @@ namespace ErnestAi.Sandbox.Chunking
                 SingleWriter = true
             });
 
-            var console = new CompactConsole();
             var config = Configuration.AppConfig.Default;
             var streamer = new Streamer(
                 host.Services.GetRequiredService<IAudioProcessor>(),
                 audioChannel.Writer,
                 config.Segmenter,
-                console,
                 new ComponentLogger("Streamer"));
 
             var csm = new ConversationStateMachine(
                 WakeWord,
                 TimeSpan.FromSeconds(ProcessingSilenceSeconds),
                 TimeSpan.FromSeconds(EndSilenceSeconds),
-                console,
                 new ComponentLogger("Conversation"));
 
             var transcriber = new Transcriber(
                 host.Services.GetRequiredService<ISpeechToTextService>(),
                 audioChannel.Reader,
-                console,
                 transcriptionChannel.Writer,
                 new ComponentLogger("Transcriber"));
 
-            console.WriteSpeechLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
-            console.WriteSpeechLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
+            Console.WriteLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
+            Console.WriteLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
             Logger.Info("Program", $"Configured wake word='{WakeWord}', processingSilence={ProcessingSilenceSeconds}s, endSilence={EndSilenceSeconds}s.");
 
             // Optional full-session recording (from app start until quit)
@@ -223,7 +219,6 @@ namespace ErnestAi.Sandbox.Chunking
             }
 
             // Keep window open after shutdown
-            console.FlushSilence();
             Logger.Info("Program", "Stopped. Press any key to close...");
             try { Console.ReadKey(true); } catch { }
         }

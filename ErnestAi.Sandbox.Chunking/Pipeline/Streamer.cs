@@ -24,7 +24,6 @@ public sealed class Streamer
     private readonly IAudioProcessor _audio;
     private readonly ChannelWriter<AudioChunk> _writer;
     private readonly SegmenterConfig _cfg;
-    private readonly CompactConsole _console;
     private readonly ILog _log;
     private WaveFileWriter? _sessionWriter; // optional full-session sink
 
@@ -35,12 +34,11 @@ public sealed class Streamer
     private int _metricsFrames;
     private double _noiseFloorRms; // adaptive noise floor
 
-    public Streamer(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, SegmenterConfig cfg, CompactConsole console, ILog log)
+    public Streamer(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, SegmenterConfig cfg, ILog log)
     {
         _audio = audio;
         _writer = writer;
         _cfg = cfg;
-        _console = console;
         _log = log;
         _log.Info("reporting in");
     }
@@ -370,7 +368,6 @@ public sealed class Streamer
         }
         else
         {
-            _console.WriteSilenceDot(); // compact UI feedback remains
             if (_cfg.EnableMetrics)
             {
                 var json = string.Create(CultureInfo.InvariantCulture, $"{{\"type\":\"segment\",\"seq\":{seq},\"ms\":{chunk.DurationMs},\"frames\":{frames.Count},\"reason\":\"{reason}\"}}");
