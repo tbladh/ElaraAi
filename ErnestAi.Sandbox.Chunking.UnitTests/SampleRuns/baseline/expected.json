@@ -29,7 +29,7 @@
       "MetricsIntervalMs": 1000
     },
     "stt": {
-      "modelFile": "ggml-medium.en.bin"
+      "modelFile": "ggml-base.en.bin"
     }
   },
   "transcripts": [

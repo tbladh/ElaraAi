@@ -14,14 +14,14 @@ A minimal, isolated console sandbox to prototype a chunked audio pipeline:
 - Drive a conversation state machine based on wake word and silence windows
 - Aggregate a session transcript when the conversation ends
 
-This project is the embryo for a modular, queue-driven architecture that will later feed downstream components (prompt building, LLMs, TTS responses).
+This project is the embryo for a modular, queue-driven architecture and the place where we will now wire the full local assistant loop: STT → LLM → TTS. The immediate goal is to keep everything runnable inside this sandbox and then consolidate the repository around it.
 
 ## Pipeline overview
 
 - Streamer reads microphone input, segments with simple VAD, and emits `AudioChunk` items.
 - Transcriber consumes `AudioChunk`, performs STT, and emits `TranscriptionItem` items.
 - ConversationStateMachine (CSM) consumes `TranscriptionItem` items, manages session state (quiescent/listening/processing), and prints the aggregated session prompt on end-of-session.
-
+  
 ### Mermaid diagram (as implemented in code)
 
 ```mermaid
@@ -117,8 +117,36 @@ Sandbox specifics related to STT:
   - macOS: `~/Library/Caches/ErnestAi/Models/Whisper`
   - Linux: `$XDG_CACHE_HOME/ErnestAi/Models/Whisper` or `~/.cache/ErnestAi/Models/Whisper`
 
-Future integration (outside this sandbox):
-- Aggregate the session text into a prompt and forward to a language model service (e.g., Ollama), then synthesize a response with TTS.
+LLM + TTS integration (in this sandbox):
+- Aggregate the session text into a prompt and send it to a local language model (Ollama), then synthesize the response with local TTS.
+
+### Immediate plan to reach full STT → LLM → TTS
+
+- __Event from CSM__: Raise a session-end event when aggregation completes.
+  - File: `Pipeline/ConversationStateMachine.cs`
+  - Add: `public event Action<string>? SessionEnded;` (or async `Func<string, Task>?`), fire it in `TransitionToQuiescent(...)` with the aggregated prompt.
+
+- __Wire LLM & TTS in Program__: Subscribe to the event and invoke LLM, then TTS.
+  - File: `Program.cs`
+  - Register `ILanguageModelService` → `ErnestAi.Intelligence.OllamaLanguageModelService` (base URL e.g., `http://localhost:11434`, set `CurrentModel`, optional `SystemPrompt`).
+  - Register `ITextToSpeechService` → `ErnestAi.Speech.TextToSpeechService` and call `InitializeOnce(voice, rate, pitch)`.
+  - On `SessionEnded(prompt)`: `var reply = await llm.GetResponseAsync(prompt); await tts.SpeakToDefaultOutputAsync(reply);`
+
+- __Keep composition-root simplicity__:
+  - Perform any model availability checks and simple configuration in `Program.cs`.
+  - Avoid pushing download/network concerns into service classes.
+
+### Prerequisites for LLM/TTS
+
+- __Ollama__: Install and run locally. Ensure a model is available (e.g., `llama3`, `qwen2.5`, `mistral`). The service file is `ErnestAi.Intelligence/OllamaLanguageModelService.cs`.
+- __Windows TTS__: Uses `System.Speech.Synthesis` via `ErnestAi.Speech/TextToSpeechService.cs`. Ensure at least one voice is installed. Configure voice/rate/pitch in `Program.cs`.
+
+### Minimal tests to validate the loop
+
+- Extend unit tests to cover the session-end flow:
+  - Drive STT from a recorded sample (`UnitTests/SampleRuns/...`).
+  - Mock or stub `ILanguageModelService` to return a deterministic response.
+  - Assert TTS invocation (e.g., write to file with `SpeakToFileAsync`).
 
 ## Getting started
 
@@ -129,7 +157,13 @@ Future integration (outside this sandbox):
 Once running:
 - Speak the wake word (default: "anna") to enter Listening.
 - Speak naturally; short silences move into Processing; extended silence ends the session.
-- The aggregated session text is printed as a prompt line.
+- The aggregated session text is printed as a prompt line, then routed to the LLM and spoken back via TTS once the integration above is wired.
+
+## Consolidation plan (post-implementation)
+
+- __Phase 1__: Complete the in-sandbox STT → LLM → TTS flow as described.
+- __Phase 2__: Migrate any reusable interfaces/utilities needed by the sandbox; retire redundant projects that are superseded by this unified flow.
+- __Phase 3__: Restructure the repository to focus on this core assistant, keeping tests and sample runs as quality gates.
 
 ## Extensibility ideas
 

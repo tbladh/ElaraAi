@@ -20,7 +20,7 @@ namespace ErnestAi.Sandbox.Chunking
         private const string WakeWord = "anna"; // simple wake word for sandbox
         private const int ProcessingSilenceSeconds = 8;  // after 5s of silence, enter processing
         private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
-        private const string SttModelFile = "ggml-medium.en.bin";
+        private const string SttModelFile = "ggml-base.en.bin";
         private const string SttModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin";
 
         private static async Task Main(string[] args)

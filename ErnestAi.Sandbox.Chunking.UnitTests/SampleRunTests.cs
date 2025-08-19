@@ -94,16 +94,18 @@ namespace ErnestAi.Sandbox.Chunking.UnitTests
                     }
                 }
 
-                // If still missing and a URL is provided in expected.json, download it (tests are allowed to fetch)
+                // If still missing, download using the sandbox downloader
                 if (!File.Exists(dstModelPath))
                 {
                     var url = expected.settings.stt.modelUrl;
-                    if (!string.IsNullOrWhiteSpace(url))
+                    if (string.IsNullOrWhiteSpace(url))
                     {
-                        using var http = new System.Net.Http.HttpClient();
-                        var bytes = await http.GetByteArrayAsync(url);
-                        await File.WriteAllBytesAsync(dstModelPath, bytes);
+                        // Derive a default whisper.cpp URL from modelFile to make the test freestanding
+                        url = $"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{modelFile}";
                     }
+
+                    // Ensure via shared downloader utility (async-first)
+                    await FileDownloader.EnsureFileAsync(dstModelPath, url);
                 }
             }
 
