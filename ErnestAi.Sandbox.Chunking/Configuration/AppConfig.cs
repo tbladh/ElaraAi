@@ -3,8 +3,11 @@ namespace ErnestAi.Sandbox.Chunking.Configuration;
 public sealed class AppConfig
 {
     public required SegmenterConfig Segmenter { get; init; }
+    public required SttConfig Stt { get; init; }
+    public required LanguageModelConfig LanguageModel { get; init; }
+    public required TextToSpeechConfig TextToSpeech { get; init; }
 
-    public static AppConfig Default => new AppConfig
+    /*public static AppConfig Default => new AppConfig
     {
         Segmenter = new SegmenterConfig
         {
@@ -35,8 +38,29 @@ public sealed class AppConfig
             BurstPeakAbsThreshold = 0.20,
             EnableMetrics = true,
             MetricsIntervalMs = 1000
+        },
+        Stt = new SttConfig
+        {
+            Language = "en",
+            ModelFile = "ggml-medium.en.bin",
+            ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin"
+        },
+        LanguageModel = new LanguageModelConfig
+        {
+            Provider = "ollama",
+            BaseUrl = "http://localhost:11434",
+            ModelName = "llama3.1:8b",
+            SystemPrompt = "You are Ernest, a concise and helpful AI assistant.",
+            OutputFilters = Array.Empty<string>()
+        },
+        TextToSpeech = new TextToSpeechConfig
+        {
+            Enabled = true,
+            Voice = null,
+            Rate = 1.0f,
+            Pitch = 1.0f
         }
-    };
+    };*/
 }
 
 public sealed class SegmenterConfig
@@ -81,4 +105,28 @@ public sealed class SegmenterConfig
     // Metrics
     public bool EnableMetrics { get; init; }
     public int MetricsIntervalMs { get; init; }
+}
+
+public sealed class SttConfig
+{
+    public string Language { get; init; } = "en";
+    public string ModelFile { get; init; } = string.Empty;
+    public string ModelUrl { get; init; } = string.Empty;
+}
+
+public sealed class LanguageModelConfig
+{
+    public string Provider { get; init; } = "ollama";
+    public string BaseUrl { get; init; } = "http://localhost:11434";
+    public string ModelName { get; init; } = string.Empty;
+    public string SystemPrompt { get; init; } = string.Empty;
+    public IEnumerable<string> OutputFilters { get; init; } = Array.Empty<string>();
+}
+
+public sealed class TextToSpeechConfig
+{
+    public bool Enabled { get; init; } = true;
+    public string? Voice { get; init; }
+    public float Rate { get; init; } = 1.0f;
+    public float Pitch { get; init; } = 1.0f;
 }

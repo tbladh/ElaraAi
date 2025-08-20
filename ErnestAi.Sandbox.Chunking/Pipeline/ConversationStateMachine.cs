@@ -15,6 +15,10 @@ public sealed class ConversationStateMachine
     private readonly ILog _log;
     private readonly object _sync = new();
 
+    // Emitted when we switch to Processing due to a brief silence window.
+    // Carries the aggregated buffered text as a single prompt string.
+    public event Action<string>? PromptReady;
+
     public DateTimeOffset? ListeningSince { get; private set; }
     public DateTimeOffset? LastHeardAt { get; private set; }
     private readonly List<TranscriptionItem> _buffer = new();
@@ -107,6 +111,12 @@ public sealed class ConversationStateMachine
         {
             IsProcessing = true;
             Log($"Listening -> Processing (silence {silence.TotalSeconds:F1}s)");
+            if (_buffer.Count > 0)
+            {
+                var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
+                _log.Info($"Prompt: {joined}");
+                try { PromptReady?.Invoke(joined); } catch { /* observer errors ignored */ }
+            }
         }
 
         if (silence >= EndSilence)
@@ -126,14 +136,6 @@ public sealed class ConversationStateMachine
 
     private void TransitionToQuiescent(string reason)
     {
-        // Aggregate and print buffered session text before resetting
-        if (_buffer.Count > 0)
-        {
-            var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
-            // Emit via injected logger for file + console subscriber
-            _log.Info($"Prompt: {joined}");
-        }
-
         Mode = ConversationMode.Quiescent;
         IsProcessing = false;
         ListeningSince = null;

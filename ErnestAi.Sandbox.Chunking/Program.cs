@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using ErnestAi.Sandbox.Chunking.Tools;
 using NAudio.Wave;
 using ErnestAi.Sandbox.Chunking.Logging;
+using ErnestAi.Sandbox.Chunking.Configuration;
+using ErnestAi.Sandbox.Chunking.Intelligence;
 using LoggingLevel = ErnestAi.Sandbox.Chunking.Logging.LogLevel;
 
 namespace ErnestAi.Sandbox.Chunking
@@ -22,8 +24,6 @@ namespace ErnestAi.Sandbox.Chunking
         private const string WakeWord = "anna"; // simple wake word for sandbox
         private const int ProcessingSilenceSeconds = 8;  // after 5s of silence, enter processing
         private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
-        private const string SttModelFile = "ggml-medium.en.bin";
-        private const string SttModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin";
 
         private static async Task Main(string[] args)
         {
@@ -48,13 +48,17 @@ namespace ErnestAi.Sandbox.Chunking
             // First message: how to terminate without closing the window
             Logger.Info("Program", "Press 'Q' to quit or use Ctrl+C to stop.");
 
+            // Load sandbox configuration
+            Logger.Info("Program", "Loading configuration (appsettings.sandbox.json or defaults)...");
+            var config = await ConfigLoader.LoadAsync();
+
             // Ensure STT model is present BEFORE DI wiring and processing (use cross-platform cache dir)
             var modelsDirPre = await AppPaths.GetModelCacheDirAsync();
-            var modelPathPre = Path.Combine(modelsDirPre, SttModelFile);
+            var modelPathPre = Path.Combine(modelsDirPre, config.Stt.ModelFile);
             if (!File.Exists(modelPathPre))
             {
-                Logger.Info("STT", $"Downloading Whisper model '{SttModelFile}'... URL: {SttModelUrl} Path: {modelPathPre}");
-                await FileDownloader.DownloadToFileAsync(modelPathPre, SttModelUrl);
+                Logger.Info("STT", $"Downloading Whisper model '{config.Stt.ModelFile}'... URL: {config.Stt.ModelUrl} Path: {modelPathPre}");
+                await FileDownloader.DownloadToFileAsync(modelPathPre, config.Stt.ModelUrl);
                 Logger.Info("STT", $"Model ready: {modelPathPre}");
             }
 
@@ -70,6 +74,22 @@ namespace ErnestAi.Sandbox.Chunking
                     services.AddSingleton<IAudioProcessor>(_ => new AudioProcessor());
                     // Construct STT with provided local model path (no downloading in service)
                     services.AddSingleton<ISpeechToTextService>(_ => new SpeechToTextService(modelPathPre));
+                    // Language model (Ollama)
+                    services.AddSingleton<ILanguageModelService>(_ =>
+                    {
+                        var svc = new OllamaLanguageModelService(config.LanguageModel.BaseUrl);
+                        svc.CurrentModel = config.LanguageModel.ModelName;
+                        svc.SystemPrompt = config.LanguageModel.SystemPrompt;
+                        svc.OutputFilters = new List<string>(config.LanguageModel.OutputFilters ?? Array.Empty<string>());
+                        return svc;
+                    });
+                    // Text-to-speech (System.Speech)
+                    services.AddSingleton<ITextToSpeechService>(_ =>
+                    {
+                        var ttsSvc = new TextToSpeechService();
+                        ttsSvc.InitializeOnce(config.TextToSpeech.Voice, config.TextToSpeech.Rate, config.TextToSpeech.Pitch);
+                        return ttsSvc;
+                    });
                 })
                 .Build();
 
@@ -90,7 +110,6 @@ namespace ErnestAi.Sandbox.Chunking
                 SingleWriter = true
             });
 
-            var config = Configuration.AppConfig.Default;
             var streamer = new Streamer(
                 host.Services.GetRequiredService<IAudioProcessor>(),
                 audioChannel.Writer,
@@ -108,6 +127,31 @@ namespace ErnestAi.Sandbox.Chunking
                 audioChannel.Reader,
                 transcriptionChannel.Writer,
                 new ComponentLogger("Transcriber"));
+
+            // Wire LLM + optional TTS on prompt ready
+            var llm = host.Services.GetRequiredService<ILanguageModelService>();
+            var tts = host.Services.GetRequiredService<ITextToSpeechService>();
+            var ttsEnabled = config.TextToSpeech.Enabled;
+            csm.PromptReady += (prompt) =>
+            {
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        Logger.Info("AI", "Calling language model...");
+                        var reply = await llm.GetResponseAsync(prompt, cts.Token);
+                        Logger.Info("AI", $"Response: {reply}");
+                        if (ttsEnabled)
+                        {
+                            await tts.SpeakToDefaultOutputAsync(reply);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("AI", $"Error handling prompt: {ex.Message}");
+                    }
+                }, cts.Token);
+            };
 
             Console.WriteLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
             Console.WriteLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
@@ -208,7 +252,7 @@ namespace ErnestAi.Sandbox.Chunking
                     {
                         wakeWord = WakeWord,
                         segmenter = config.Segmenter,
-                        stt = new { modelFile = SttModelFile }
+                        stt = new { modelFile = config.Stt.ModelFile }
                     },
                     transcripts = recordedItems,
                     tolerances = new { cer = 0.25, wer = 0.4 }
