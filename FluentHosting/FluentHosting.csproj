@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Version>1.0.1</Version>
+    <Description>A trivially simple and fluently composable web server for those times when you quickly need to get a no-frills server up and running. Ideal for development and testing.</Description>
+    <Copyright>Copyright 2020 Thomas Bladh</Copyright>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <PackageLicenseFile>license.md</PackageLicenseFile>
+    <PackageReleaseNotes>Initial release.</PackageReleaseNotes>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
+    <PackageProjectUrl>https://github.com/tbladh/FluentHosting</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/tbladh/FluentHosting</RepositoryUrl>
+    <RepositoryType>GitHub</RepositoryType>
+    <Authors>Thomas Bladh</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+  </ItemGroup>
+
+</Project>
