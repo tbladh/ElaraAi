@@ -7,6 +7,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Documents", "Documents", "{
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elara.Host", "Elara.Host\Elara.Host.csproj", "{7455293D-0E15-883B-3844-E818A3295B26}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elara.UnitTests", "Elara.UnitTests\Elara.UnitTests.csproj", "{F1E0439C-1371-CCE0-9FC0-AC255A4EE2D9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,6 +19,10 @@ Global
 		{7455293D-0E15-883B-3844-E818A3295B26}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7455293D-0E15-883B-3844-E818A3295B26}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7455293D-0E15-883B-3844-E818A3295B26}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1E0439C-1371-CCE0-9FC0-AC255A4EE2D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1E0439C-1371-CCE0-9FC0-AC255A4EE2D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1E0439C-1371-CCE0-9FC0-AC255A4EE2D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1E0439C-1371-CCE0-9FC0-AC255A4EE2D9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

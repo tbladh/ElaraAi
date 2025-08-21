@@ -1,8 +1,8 @@
 using System.Text.Json;
-using ErnestAi.Sandbox.Chunking.Speech;
-using ErnestAi.Sandbox.Chunking.Tools;
+using Elara.Host.Speech;
+using Elara.Host.Tools;
 
-namespace ErnestAi.Sandbox.Chunking.UnitTests
+namespace Elara.UnitTests
 {
     public sealed class SampleRunTests
     {

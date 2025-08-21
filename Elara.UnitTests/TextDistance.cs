@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
-namespace ErnestAi.Sandbox.Chunking.UnitTests
+namespace Elara.UnitTests
 {
     internal static class TextDistance
     {
@@ -14,7 +10,7 @@ namespace ErnestAi.Sandbox.Chunking.UnitTests
             var refChars = reference.ToCharArray();
             var hypChars = hypothesis.ToCharArray();
             int d = Levenshtein(refChars, hypChars);
-            return refChars.Length == 0 ? (hypChars.Length == 0 ? 0.0 : 1.0) : (double)d / refChars.Length;
+            return refChars.Length == 0 ? hypChars.Length == 0 ? 0.0 : 1.0 : (double)d / refChars.Length;
         }
 
         public static double WordErrorRate(string reference, string hypothesis)
@@ -22,7 +18,7 @@ namespace ErnestAi.Sandbox.Chunking.UnitTests
             var refWords = Tokenize(reference);
             var hypWords = Tokenize(hypothesis);
             int d = Levenshtein(refWords, hypWords);
-            return refWords.Length == 0 ? (hypWords.Length == 0 ? 0.0 : 1.0) : (double)d / refWords.Length;
+            return refWords.Length == 0 ? hypWords.Length == 0 ? 0.0 : 1.0 : (double)d / refWords.Length;
         }
 
         private static string[] Tokenize(string? text)
