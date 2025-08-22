@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -16,5 +16,15 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <Target Name="GenerateThirdPartyNotices" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <PropertyGroup>
+      <TPNScript>$(SolutionDir)build\Generate-TPN.ps1</TPNScript>
+      <TPNOut>$(OutputPath)THIRD-PARTY-NOTICES.md</TPNOut>
+    </PropertyGroup>
+    <Message Text="Generating THIRD-PARTY-NOTICES.md via $(TPNScript)" Importance="High" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(TPNScript)&quot; -ProjectPath &quot;$(ProjectPath)&quot; -OutputPath &quot;$(TPNOut)&quot; -VerboseLogging" />
+    <Copy SourceFiles="$(SolutionDir)LICENSE.md" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

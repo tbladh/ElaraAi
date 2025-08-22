@@ -31,14 +31,18 @@ namespace Elara.Updater.Dev
 
         public class RepoConfig
         {
-            public string Path { get; set; } = @"C:\\Repos\\ElaraAI";
+            // Absolute root path on disk for the local clone
+            public string RootPath { get; set; } = @"C:\\Repos\\ElaraAI";
+            // GitHub URL to clone from when repo is missing
+            public string Url { get; set; } = "https://github.com/tbladh/ElaraAi";
             public string Branch { get; set; } = "main";
         }
 
         public class HostConfig
         {
             public string ProcessName { get; set; } = "Elara.Host";
-            public string ExePath { get; set; } = @"C:\\Repos\\ElaraAI\\Elara.Host\\bin\\Debug\\net8.0\\Elara.Host.exe";
+            // Relative to Repo.RootPath
+            public string ExeRelativePath { get; set; } = @"Elara.Host\\bin\\Debug\\net8.0\\Elara.Host.exe";
             public string Args { get; set; } = string.Empty;
         }
 

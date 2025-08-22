@@ -4,6 +4,41 @@ namespace Elara.Updater.Dev
 {
     public static class GitUtils
     {
+        public static bool IsGitRepo(string rootPath)
+        {
+            try
+            {
+                var gitDir = Path.Combine(rootPath, ".git");
+                return Directory.Exists(gitDir);
+            }
+            catch { return false; }
+        }
+
+        public static async Task<(bool ok, string output)> CloneRepoAsync(string gitCli, string url, string targetPath, Action<string>? log = null)
+        {
+            try
+            {
+                var parent = Directory.GetParent(targetPath)?.FullName;
+                if (string.IsNullOrWhiteSpace(parent))
+                {
+                    return (false, $"Invalid target path: {targetPath}");
+                }
+                if (!Directory.Exists(parent)) Directory.CreateDirectory(parent);
+                // Use 'git clone <url> <targetPath>' from parent directory
+                var args = $"clone {url} \"{targetPath}\"";
+                return await RunGitAsync(gitCli, args, parent, log);
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke($"Clone exception: {ex.Message}");
+                return (false, ex.Message);
+            }
+        }
+
+        public static (bool ok, string output) CloneRepo(string gitCli, string url, string targetPath, Action<string>? log = null)
+        {
+            return CloneRepoAsync(gitCli, url, targetPath, log).GetAwaiter().GetResult();
+        }
         // Async first
         public static async Task<(bool ok, string output)> RunGitAsync(string gitCli, string args, string workingDir, Action<string>? log = null)
         {
