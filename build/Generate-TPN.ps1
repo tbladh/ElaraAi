@@ -1,6 +1,6 @@
 param(
-  [Parameter(Mandatory=$true)][string]$ProjectPath,
-  [Parameter(Mandatory=$true)][string]$OutputPath,
+  [string]$ProjectPath,
+  [string]$OutputPath,
   [switch]$VerboseLogging
 )
 
@@ -8,6 +8,18 @@ $ErrorActionPreference = 'Stop'
 if ($VerboseLogging) { $VerbosePreference = 'Continue' }
 
 function Write-Info($msg) { Write-Host "[TPN] $msg" }
+
+# Default to Elara.Host if not supplied
+if (-not $ProjectPath) {
+  $solutionRoot = Split-Path $PSScriptRoot -Parent
+  $ProjectPath = Join-Path $solutionRoot 'Elara.Host\Elara.Host.csproj'
+  Write-Info "No ProjectPath supplied. Defaulting to $ProjectPath"
+}
+if (-not $OutputPath) {
+  $projDirDefault = Split-Path -Parent $ProjectPath
+  $OutputPath = Join-Path $projDirDefault 'THIRD-PARTY-NOTICES.md'
+  Write-Info "No OutputPath supplied. Will update only $OutputPath"
+}
 
 function Get-PackagesFromProjectJson {
   param([object]$json)
@@ -205,17 +217,19 @@ try {
   Write-Info "Generating THIRD-PARTY-NOTICES.md with $($packages.Count) packages"
   $content = New-ThirdPartyNotices -Packages $packages
 
-  # 3) Write to project root and output path
+  # 3) Write to project root and optional output path
   $projDir = Split-Path -Parent $ProjectPath
   $rootOut = Join-Path $projDir 'THIRD-PARTY-NOTICES.md'
   Set-Content -Encoding UTF8 -Path $rootOut -Value $content
 
-  # Ensure output folder exists
-  $outDir = Split-Path -Parent $OutputPath
-  if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Force -Path $outDir | Out-Null }
-  Set-Content -Encoding UTF8 -Path $OutputPath -Value $content
-
-  Write-Info "Wrote: $rootOut and $OutputPath"
+  if ($OutputPath -and $OutputPath -ne $rootOut) {
+    $outDir = Split-Path -Parent $OutputPath
+    if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Force -Path $outDir | Out-Null }
+    Set-Content -Encoding UTF8 -Path $OutputPath -Value $content
+    Write-Info "Wrote: $rootOut and $OutputPath"
+  } else {
+    Write-Info "Wrote: $rootOut"
+  }
 
   # Write debug sidecar next to rootOut
   $debugPath = [System.IO.Path]::ChangeExtension($rootOut, '.debug.txt')

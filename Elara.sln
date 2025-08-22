@@ -20,6 +20,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluentHosting.Tests", "Flue
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Utilities", "Utilities", "{B1D731FE-D696-4000-B80E-DD403D4419F6}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{31AABD2F-C786-48F1-A88B-7667484F106F}"
+	ProjectSection(SolutionItems) = preProject
+		build\Generate-TPN.ps1 = build\Generate-TPN.ps1
+		build\Update-ThirdParty-Notices.cmd = build\Update-ThirdParty-Notices.cmd
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

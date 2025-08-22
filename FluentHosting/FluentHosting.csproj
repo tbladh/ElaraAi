@@ -19,13 +19,6 @@
   <ItemGroup>
   </ItemGroup>
 
-  <Target Name="GenerateThirdPartyNotices" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
-    <PropertyGroup>
-      <TPNScript>$(SolutionDir)build\Generate-TPN.ps1</TPNScript>
-      <TPNOut>$(OutputPath)THIRD-PARTY-NOTICES.md</TPNOut>
-    </PropertyGroup>
-    <Message Text="Generating THIRD-PARTY-NOTICES.md via $(TPNScript)" Importance="High" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(TPNScript)&quot; -ProjectPath &quot;$(ProjectPath)&quot; -OutputPath &quot;$(TPNOut)&quot; -VerboseLogging" />
-  </Target>
+  
 
 </Project>

@@ -5,6 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\LICENSE.md" Link="LICENSE.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8" />
@@ -22,17 +27,14 @@
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="README.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <!-- Internalized minimal dependencies; no project references needed -->
 
-  <Target Name="GenerateThirdPartyNotices" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
-    <PropertyGroup>
-      <TPNScript>$(SolutionDir)build\Generate-TPN.ps1</TPNScript>
-      <TPNOut>$(OutputPath)THIRD-PARTY-NOTICES.md</TPNOut>
-    </PropertyGroup>
-    <Message Text="Generating THIRD-PARTY-NOTICES.md via $(TPNScript)" Importance="High" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(TPNScript)&quot; -ProjectPath &quot;$(ProjectPath)&quot; -OutputPath &quot;$(TPNOut)&quot; -VerboseLogging" />
-    <Copy SourceFiles="$(SolutionDir)LICENSE.md" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
-  </Target>
 </Project>
