@@ -26,6 +26,14 @@ namespace Elara.Host.Core.Interfaces
         /// <param name="text">The text to convert to speech</param>
         /// <returns>A task representing the asynchronous operation</returns>
         Task SpeakToDefaultOutputAsync(string text);
+
+        /// <summary>
+        /// Converts text to speech and plays it through the default audio output device, cancelable.
+        /// </summary>
+        /// <param name="text">The text to convert to speech</param>
+        /// <param name="cancellationToken">Token to cancel ongoing speech</param>
+        /// <returns>A task representing the asynchronous operation</returns>
+        Task SpeakToDefaultOutputAsync(string text, CancellationToken cancellationToken);
         
         /// <summary>
         /// Gets the available voices for this service

@@ -7,7 +7,7 @@ namespace Elara.Host.Pipeline;
 public sealed class ConversationStateMachine
 {
     public ConversationMode Mode { get; private set; } = ConversationMode.Quiescent;
-    public bool IsProcessing { get; private set; } // TODO: This should simply be an event.
+    public bool IsSpeaking => Mode == ConversationMode.Speaking;
 
     public string WakeWord { get; }
     public TimeSpan ProcessingSilence { get; }
@@ -67,18 +67,17 @@ public sealed class ConversationStateMachine
                 case ConversationMode.Listening:
                     if (meaningful)
                     {
-                        // Any speech resets processing flag
-                        var wasProcessing = IsProcessing;
                         LastHeardAt = timestampUtc;
-                        if (wasProcessing)
-                        {
-                            IsProcessing = false;
-                            Log($"Processing -> Listening (speech resumed)");
-                        }
+                        _buffer.Add(new TranscriptionItem { TimestampUtc = timestampUtc, Text = text, IsMeaningful = true });
                     }
 
                     // Evaluate silence windows
                     EvaluateSilence(timestampUtc);
+                    break;
+
+                case ConversationMode.Processing:
+                case ConversationMode.Speaking:
+                    // While processing or speaking, ignore incoming transcriptions entirely.
                     break;
             }
         }
@@ -91,12 +90,6 @@ public sealed class ConversationStateMachine
     {
         // Wake detection uses raw text
         HandleTranscription(item.TimestampUtc, item.Text, item.IsMeaningful);
-
-        // Buffer meaningful items only while listening/processing
-        if (Mode == ConversationMode.Listening && item.IsMeaningful)
-        {
-            _buffer.Add(item);
-        }
     }
 
     private void EvaluateSilence(DateTimeOffset nowUtc)
@@ -107,15 +100,17 @@ public sealed class ConversationStateMachine
         var anchor = LastHeardAt ?? ListeningSince ?? nowUtc;
         var silence = nowUtc - anchor;
 
-        if (!IsProcessing && silence >= ProcessingSilence)
+        if (silence >= ProcessingSilence)
         {
-            IsProcessing = true;
-            Log($"Listening -> Processing (silence {silence.TotalSeconds:F1}s)");
             if (_buffer.Count > 0)
             {
-                var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
-                _log.Info($"Prompt: {joined}");
-                try { PromptReady?.Invoke(joined); } catch { /* observer errors ignored */ }
+                TransitionToProcessing(reason: $"silence {silence.TotalSeconds:F1}s");
+            }
+            else
+            {
+                // No content captured; keep listening and reset anchor to avoid immediate retrigger
+                ListeningSince = nowUtc;
+                Log("Skip Processing: empty buffer");
             }
         }
 
@@ -128,20 +123,65 @@ public sealed class ConversationStateMachine
     private void TransitionToListening(DateTimeOffset nowUtc, string reason)
     {
         Mode = ConversationMode.Listening;
-        IsProcessing = false;
         ListeningSince = nowUtc;
         LastHeardAt = null;
-        Log($"Quiescent -> Listening ({reason})");
+        Log($"-> Listening ({reason})");
     }
 
     private void TransitionToQuiescent(string reason)
     {
         Mode = ConversationMode.Quiescent;
-        IsProcessing = false;
         ListeningSince = null;
         LastHeardAt = null;
         _buffer.Clear();
-        Log($"Listening -> Quiescent ({reason})");
+        Log($"-> Quiescent ({reason})");
+    }
+
+    private void TransitionToProcessing(string reason)
+    {
+        Mode = ConversationMode.Processing;
+        Log($"Listening -> Processing ({reason})");
+        if (_buffer.Count > 0)
+        {
+            var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
+            _buffer.Clear();
+            try { PromptReady?.Invoke(joined); } catch { }
+        }
+    }
+
+    public void BeginSpeaking()
+    {
+        lock (_sync)
+        {
+            if (Mode != ConversationMode.Speaking)
+            {
+                Mode = ConversationMode.Speaking;
+                _buffer.Clear();
+                Log("-> Speaking (audio output in progress)");
+            }
+        }
+    }
+
+    public void EndSpeaking()
+    {
+        lock (_sync)
+        {
+            if (Mode == ConversationMode.Speaking)
+            {
+                TransitionToListening(DateTimeOffset.UtcNow, "speech completed");
+            }
+        }
+    }
+
+    public void EndProcessing()
+    {
+        lock (_sync)
+        {
+            if (Mode == ConversationMode.Processing)
+            {
+                TransitionToListening(DateTimeOffset.UtcNow, "processing completed");
+            }
+        }
     }
 
     private void Log(string message)

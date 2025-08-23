@@ -143,12 +143,29 @@ namespace Elara.Host
                         Logger.Info("AI", $"Response: {reply}");
                         if (ttsEnabled)
                         {
-                            await tts.SpeakToDefaultOutputAsync(reply);
+                            // Transition: Processing -> Speaking for audio output
+                            csm.BeginSpeaking();
+                            try
+                            {
+                                await tts.SpeakToDefaultOutputAsync(reply);
+                            }
+                            finally
+                            {
+                                csm.EndSpeaking();
+                            }
+                        }
+                        else
+                        {
+                            // No audio output: end processing explicitly
+                            csm.EndProcessing();
                         }
                     }
                     catch (Exception ex)
                     {
                         Logger.Error("AI", $"Error handling prompt: {ex.Message}");
+                        // Ensure we leave current active phase on error
+                        if (csm.IsSpeaking) csm.EndSpeaking();
+                        else csm.EndProcessing();
                     }
                 }, cts.Token);
             };

@@ -1,5 +1,6 @@
 using Elara.Host.Core.Interfaces;
 using System.Speech.Synthesis;
+using System.Threading;
 
 namespace Elara.Host.Speech
 {
@@ -135,6 +136,57 @@ namespace Elara.Host.Speech
                 ApplyVoiceSettings();
                 _synthesizer.Speak(text);
             });
+        }
+
+        /// <summary>
+        /// Converts text to speech and plays it through the default audio output device. Supports cancellation.
+        /// </summary>
+        public Task SpeakToDefaultOutputAsync(string text, CancellationToken cancellationToken)
+        {
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            // Ensure output and settings on thread where we start async speak
+            void OnCompleted(object? s, SpeakCompletedEventArgs e)
+            {
+                _synthesizer.SpeakCompleted -= OnCompleted;
+                if (e.Cancelled)
+                {
+                    tcs.TrySetCanceled(cancellationToken);
+                }
+                else if (e.Error != null)
+                {
+                    tcs.TrySetException(e.Error);
+                }
+                else
+                {
+                    tcs.TrySetResult(true);
+                }
+            }
+
+            // Register cancellation to abort ongoing speech
+            var reg = cancellationToken.Register(() =>
+            {
+                try { _synthesizer.SpeakAsyncCancelAll(); } catch { }
+            });
+
+            try
+            {
+                _synthesizer.SetOutputToDefaultAudioDevice();
+                ApplyVoiceSettings();
+                _synthesizer.SpeakCompleted += OnCompleted;
+                _synthesizer.SpeakAsync(text);
+            }
+            catch (Exception ex)
+            {
+                reg.Dispose();
+                _synthesizer.SpeakCompleted -= OnCompleted;
+                return Task.FromException(ex);
+            }
+
+            return tcs.Task.ContinueWith(t =>
+            {
+                reg.Dispose();
+                return t; // unwrap
+            }).Unwrap();
         }
 
         /// <summary>
