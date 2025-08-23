@@ -203,16 +203,6 @@ try {
     Write-Verbose ("Merged sample: {0}" -f (($packages | Select-Object -First 10 | ForEach-Object { "{0} {1}" -f $_.Name, $_.Version }) -join ', '))
   }
 
-  # Write debug sidecar file with details
-  $debugLines = @()
-  $debugLines += "dotnet list count: $($packagesList.Count)"
-  $debugLines += "assets.json path: $assetsPath"
-  $debugLines += "assets.json count: $($packagesAssets.Count)"
-  $debugLines += "merged count: $($packages.Count)"
-  $debugLines += "dotnet list sample: " + (($packagesList | Select-Object -First 10 | ForEach-Object { "{0} {1}" -f $_.Name, $_.Version }) -join ', ')
-  $debugLines += "assets sample: " + (($packagesAssets | Select-Object -First 10 | ForEach-Object { "{0} {1}" -f $_.Name, $_.Version }) -join ', ')
-  $debugLines += "merged sample: " + (($packages | Select-Object -First 20 | ForEach-Object { "{0} {1}" -f $_.Name, $_.Version }) -join ', ')
-
   # 2) Generate markdown
   Write-Info "Generating THIRD-PARTY-NOTICES.md with $($packages.Count) packages"
   $content = New-ThirdPartyNotices -Packages $packages
@@ -231,10 +221,6 @@ try {
     Write-Info "Wrote: $rootOut"
   }
 
-  # Write debug sidecar next to rootOut
-  $debugPath = [System.IO.Path]::ChangeExtension($rootOut, '.debug.txt')
-  Set-Content -Encoding UTF8 -Path $debugPath -Value ($debugLines -join "`r`n")
-  Write-Verbose ("Wrote debug info to {0}" -f $debugPath)
 } catch {
   Fail "Unhandled error: $($_.Exception.Message)" $($_.ScriptStackTrace)
 }
