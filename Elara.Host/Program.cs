@@ -1,5 +1,4 @@
 using System.Threading.Channels;
-using System.Text.Json;
 using Elara.Host.Audio;
 using Elara.Host.Speech;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +12,7 @@ using Elara.Host.Core.Interfaces;
 using Elara.Host.Tools;
 using Elara.Host.Logging;
 using Elara.Host.Pipeline;
+using Elara.Host.Utilities;
 
 namespace Elara.Host
 {
@@ -87,6 +87,20 @@ namespace Elara.Host
 
             // First message: how to terminate without closing the window
             Logger.Info("Program", "Press 'Q' to quit or use Ctrl+C to stop.");
+
+            // Parse command-line: --record[=scenario]
+            bool recordingEnabled = false;
+            string? recordScenario = null;
+            foreach (var a in args ?? Array.Empty<string>())
+            {
+                if (a.StartsWith("--record", StringComparison.OrdinalIgnoreCase))
+                {
+                    recordingEnabled = true;
+                    var eq = a.IndexOf('=');
+                    if (eq > 0 && eq < a.Length - 1)
+                        recordScenario = a[(eq + 1)..];
+                }
+            }
 
             // Ensure STT model is present BEFORE DI wiring and processing (use cross-platform cache dir)
             var modelsDirPre = await AppPaths.GetModelCacheDirAsync();
@@ -214,46 +228,14 @@ namespace Elara.Host
             Console.WriteLine($"Wake word: '{config.Host.WakeWord}', processing after {config.Host.ProcessingSilenceSeconds}s silence, end after {config.Host.EndSilenceSeconds}s silence.");
             Logger.Info("Program", $"Configured wake word='{config.Host.WakeWord}', processingSilence={config.Host.ProcessingSilenceSeconds}s, endSilence={config.Host.EndSilenceSeconds}s.");
 
-            // Optional full-session recording (from app start until quit)
-            string recAns = "no";
-            if (config.Host.SessionRecording.EnablePrompt)
+            // Optional full-session recording (from app start until quit), controlled by --record
+            SessionRecording? session = null;
+            if (recordingEnabled)
             {
-                Console.Write("Record this session to a WAV file and collect transcriptions? (yes/no) ");
-                recAns = (Console.ReadLine() ?? string.Empty).Trim().ToLowerInvariant();
-            }
-            List<TranscriptionItem>? recordedItems = null;
-            string? sessionJsonPath = null;
-            if (recAns == "y" || recAns == "yes")
-            {
-                string scenario;
-                if (config.Host.SessionRecording.EnablePrompt)
-                {
-                    Console.Write("Scenario folder (e.g., short-wake-word): ");
-                    scenario = (Console.ReadLine() ?? config.Host.SessionRecording.DefaultScenario).Trim();
-                    if (string.IsNullOrWhiteSpace(scenario)) scenario = config.Host.SessionRecording.DefaultScenario;
-                }
-                else
-                {
-                    scenario = config.Host.SessionRecording.DefaultScenario;
-                }
-
-                var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
-                var runsBase = Path.IsPathRooted(config.Host.SessionRecording.BaseDirectory)
-                    ? config.Host.SessionRecording.BaseDirectory
-                    : Path.Combine(AppContext.BaseDirectory, config.Host.SessionRecording.BaseDirectory);
-                var baseDir = Path.Combine(runsBase, scenario, stamp);
-                Directory.CreateDirectory(baseDir);
-
-                var wavPath = Path.Combine(baseDir, "audio.wav");
-                sessionJsonPath = Path.Combine(baseDir, "expected.json");
-
-                // Create session writer with sandbox segmenter format
+                var scenario = string.IsNullOrWhiteSpace(recordScenario) ? config.Host.SessionRecording.DefaultScenario : recordScenario!;
                 var fmt = new WaveFormat(config.Segmenter.SampleRate, config.Segmenter.Channels);
-                var sessionWriter = new WaveFileWriter(wavPath, fmt);
-                streamer.SetSessionWriter(sessionWriter);
-
-                recordedItems = new List<TranscriptionItem>(capacity: 256);
-                Logger.Info("Recorder", $"Writing full session to: {wavPath}");
+                session = SessionRecording.Start(config.Host.SessionRecording.BaseDirectory, scenario, fmt, streamer, config.Host.SessionRecording.Tolerances);
+                Logger.Info("Recorder", $"Writing full session to: {session.AudioWavPath}");
             }
 
             // Key listener task for graceful termination via single keypress
@@ -286,10 +268,7 @@ namespace Elara.Host
                     await foreach (var item in transcriptionChannel.Reader.ReadAllAsync(cts.Token))
                     {
                         csm.HandleTranscription(item); // Feeds FSM: wake detection, buffering, silence evaluation
-                        if (recordedItems != null)
-                        {
-                            recordedItems.Add(item);
-                        }
+                        session?.Add(item);
                     }
                 }
                 catch (OperationCanceledException) { }
@@ -316,22 +295,10 @@ namespace Elara.Host
             await Task.WhenAll(recordTask, transcribeTask, fsmTask, tickerTask, keyTask);
 
             // If session recording was enabled, write expected.json from collected transcriptions and settings
-            if (recordedItems != null && sessionJsonPath != null)
+            if (session != null)
             {
-                var expectedObj = new
-                {
-                    settings = new
-                    {
-                        wakeWord = config.Host.WakeWord,
-                        segmenter = config.Segmenter,
-                        stt = new { modelFile = config.Stt.ModelFile }
-                    },
-                    transcripts = recordedItems,
-                    tolerances = new { cer = config.Host.SessionRecording.Tolerances.CER, wer = config.Host.SessionRecording.Tolerances.WER }
-                };
-                var json = JsonSerializer.Serialize(expectedObj, new JsonSerializerOptions { WriteIndented = true });
-                await File.WriteAllTextAsync(sessionJsonPath, json);
-                Logger.Info("Recorder", $"Wrote expected.json with {recordedItems.Count} items");
+                await session.WriteExpectedAsync(config);
+                session.Dispose();
             }
 
             // Keep window open after shutdown
