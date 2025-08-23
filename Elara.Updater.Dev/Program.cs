@@ -17,6 +17,68 @@ void Log(string msg)
     Console.WriteLine($"[{DateTimeOffset.Now:u}] {msg}");
 }
 
+string HostProjectPath()
+{
+    // Infer project path from ExeRelativePath (e.g., Elara.Host\\bin\\Debug\\net8.0\\Elara.Host.exe)
+    var rel = (cfg.Host.ExeRelativePath ?? string.Empty).Replace('/', Path.DirectorySeparatorChar);
+    var parts = rel.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+    var binIdx = Array.FindIndex(parts, p => string.Equals(p, "bin", StringComparison.OrdinalIgnoreCase));
+    string projectDirRel;
+    if (binIdx > 0)
+        projectDirRel = string.Join(Path.DirectorySeparatorChar, parts.Take(binIdx));
+    else
+        projectDirRel = "Elara.Host"; // sensible default
+    var projName = Path.GetFileName(projectDirRel.TrimEnd(Path.DirectorySeparatorChar));
+    return Path.Combine(RepoRoot(), projectDirRel, projName + ".csproj");
+}
+
+string HostBuildConfiguration()
+{
+    var rel = (cfg.Host.ExeRelativePath ?? string.Empty).Replace('/', Path.DirectorySeparatorChar);
+    var parts = rel.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+    var binIdx = Array.FindIndex(parts, p => string.Equals(p, "bin", StringComparison.OrdinalIgnoreCase));
+    if (binIdx >= 0 && parts.Length > binIdx + 1)
+        return parts[binIdx + 1]; // e.g., Debug or Release
+    return "Debug";
+}
+
+async Task<(bool ok, string output)> BuildHostAsync()
+{
+    try
+    {
+        var projectPath = HostProjectPath();
+        var config = HostBuildConfiguration();
+        var workingDir = Path.GetDirectoryName(projectPath)!;
+        Log($"Building host: {projectPath} -c {config}");
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"build \"{projectPath}\" -c {config}",
+            WorkingDirectory = workingDir,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        var proc = System.Diagnostics.Process.Start(psi);
+        if (proc == null) return (false, "Failed to start dotnet build process");
+        var stdout = new List<string>();
+        var stderr = new List<string>();
+        proc.OutputDataReceived += (_, e) => { if (e.Data != null) { stdout.Add(e.Data); Log($"[build] {e.Data}"); } };
+        proc.ErrorDataReceived += (_, e) => { if (e.Data != null) { stderr.Add(e.Data); Log($"[build] {e.Data}"); } };
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+        await proc.WaitForExitAsync();
+        var ok = proc.ExitCode == 0;
+        var output = string.Join(Environment.NewLine, ok ? stdout : stderr);
+        return (ok, output);
+    }
+    catch (Exception ex)
+    {
+        return (false, ex.Message);
+    }
+}
+
 bool PromptYesNo(string message, bool defaultNo = true)
 {
     Console.Write(message + (defaultNo ? " [y/N]: " : " [Y/n]: "));
@@ -63,6 +125,11 @@ async Task EnsureRepoAsync()
     {
         throw new InvalidOperationException($"Update failed: {msgUpdate}");
     }
+    var (okBuild, buildOut) = await BuildHostAsync();
+    if (!okBuild)
+    {
+        throw new InvalidOperationException($"Build failed: {buildOut}");
+    }
 }
 
 async Task<object> RedeployAsync()
@@ -88,6 +155,14 @@ async Task<object> RedeployAsync()
         {
             Log(msgUpdate);
             return new { ok = false, message = msgUpdate };
+        }
+
+        // Build host after pull
+        var (okBuild, buildOut) = await BuildHostAsync();
+        if (!okBuild)
+        {
+            Log(buildOut);
+            return new { ok = false, message = "Build failed." };
         }
 
         // Start host
