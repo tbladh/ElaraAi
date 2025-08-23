@@ -22,12 +22,8 @@ namespace Elara.Host
     /// </summary>
     internal class Program
     {
-        // Tunables for this sandbox
-        private const int ChunkMs = 3000;         // 3 seconds per chunk (better context)
-        private const int AudioQueueCapacity = 16;
-        private const string WakeWord = "elara"; // simple wake word for sandbox
-        private const int ProcessingSilenceSeconds = 8;  // after 5s of silence, enter processing
-        private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
+        // Legacy constants (kept for reference; values now sourced from config)
+        private const int ChunkMs = 3000;         // unused; segmentation uses config.Segmenter
 
         /// <summary>
         /// Entry point that composes the pipeline and runs until canceled.
@@ -42,11 +38,48 @@ namespace Elara.Host
                 cts.Cancel();
             };
 
-            // Configure logging (file + console subscriber)
-            var logDir = Path.Combine(AppContext.BaseDirectory, "Logs");
-            Directory.CreateDirectory(logDir);
-            var logFile = Path.Combine(logDir, $"sandbox-{DateTimeOffset.Now:yyyyMMdd}.log");
-            Logger.Configure(logFile, LoggingLevel.Debug); // allow debug by default
+            // Load configuration early so logging can be configured from settings
+            var config = await ConfigLoader.LoadAsync();
+
+            // Configure logging (file + console subscriber) based on config
+            static string ResolveLogPath(string baseDir, string dirSetting)
+            {
+                return Path.IsPathRooted(dirSetting) ? dirSetting : Path.Combine(baseDir, dirSetting);
+            }
+
+            static string RenderFileNamePattern(string pattern)
+            {
+                // Supports {date:format} token
+                const string token = "{date:";
+                int idx = pattern.IndexOf(token, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    int end = pattern.IndexOf('}', idx + token.Length);
+                    if (end > idx)
+                    {
+                        var fmt = pattern.Substring(idx + token.Length, end - (idx + token.Length));
+                        var rendered = DateTimeOffset.Now.ToString(fmt);
+                        return pattern.Substring(0, idx) + rendered + pattern.Substring(end + 1);
+                    }
+                }
+                return pattern;
+            }
+
+            var resolvedLogDir = ResolveLogPath(AppContext.BaseDirectory, config.Logging.Directory);
+            Directory.CreateDirectory(resolvedLogDir);
+            var logFile = Path.Combine(resolvedLogDir, RenderFileNamePattern(config.Logging.FileNamePattern));
+
+            // Map string level to enum
+            LoggingLevel minLevel = config.Logging.Level?.ToLowerInvariant() switch
+            {
+                "debug" => LoggingLevel.Debug,
+                "info" => LoggingLevel.Info,
+                "warn" => LoggingLevel.Warn,
+                "error" => LoggingLevel.Error,
+                _ => LoggingLevel.Debug
+            };
+
+            Logger.Configure(logFile, minLevel);
             Logger.OnLog += (evt) =>
             {
                 ConsoleColorizer.WithColorFor(evt.Source, evt.Level, () => Console.WriteLine(evt.ToString()));
@@ -54,10 +87,6 @@ namespace Elara.Host
 
             // First message: how to terminate without closing the window
             Logger.Info("Program", "Press 'Q' to quit or use Ctrl+C to stop.");
-
-            // Load sandbox configuration
-            Logger.Info("Program", "Loading configuration (appsettings.sandbox.json or defaults)...");
-            var config = await ConfigLoader.LoadAsync();
 
             // Ensure STT model is present BEFORE DI wiring and processing (use cross-platform cache dir)
             var modelsDirPre = await AppPaths.GetModelCacheDirAsync();
@@ -73,7 +102,7 @@ namespace Elara.Host
                 .ConfigureLogging(logging =>
                 {
                     logging.ClearProviders();
-                    logging.AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss ");
+                    logging.AddSimpleConsole(o => o.TimestampFormat = config.Logging.ConsoleTimestampFormat);
                 })
                 .ConfigureServices(services =>
                 {
@@ -103,7 +132,7 @@ namespace Elara.Host
             Logger.Debug("Program", "Host built and services configured.");
 
             // Channel for audio chunks from Streamer -> Transcriber
-            var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(AudioQueueCapacity)
+            var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(config.Host.AudioQueueCapacity)
             {
                 FullMode = BoundedChannelFullMode.DropOldest,
                 SingleReader = true,
@@ -111,7 +140,7 @@ namespace Elara.Host
             });
 
             // Transcription pipeline channel (producer: Transcriber, consumer: FSM consumer loop)
-            var transcriptionChannel = Channel.CreateBounded<TranscriptionItem>(new BoundedChannelOptions(64)
+            var transcriptionChannel = Channel.CreateBounded<TranscriptionItem>(new BoundedChannelOptions(config.Host.TranscriptionQueueCapacity)
             {
                 FullMode = BoundedChannelFullMode.DropOldest,
                 SingleReader = true,
@@ -127,9 +156,9 @@ namespace Elara.Host
 
             // FSM manages conversation transitions; Transcriber feeds it via transcriptionChannel
             var csm = new ConversationStateMachine(
-                WakeWord,
-                TimeSpan.FromSeconds(ProcessingSilenceSeconds),
-                TimeSpan.FromSeconds(EndSilenceSeconds),
+                config.Host.WakeWord,
+                TimeSpan.FromSeconds(config.Host.ProcessingSilenceSeconds),
+                TimeSpan.FromSeconds(config.Host.EndSilenceSeconds),
                 new ComponentLogger("Conversation"));
 
             // Transcriber consumes audio chunks -> STT -> TranscriptionItem -> transcriptionChannel
@@ -182,22 +211,37 @@ namespace Elara.Host
             };
 
             Console.WriteLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
-            Console.WriteLine($"Wake word: '{WakeWord}', processing after {ProcessingSilenceSeconds}s silence, end after {EndSilenceSeconds}s silence.");
-            Logger.Info("Program", $"Configured wake word='{WakeWord}', processingSilence={ProcessingSilenceSeconds}s, endSilence={EndSilenceSeconds}s.");
+            Console.WriteLine($"Wake word: '{config.Host.WakeWord}', processing after {config.Host.ProcessingSilenceSeconds}s silence, end after {config.Host.EndSilenceSeconds}s silence.");
+            Logger.Info("Program", $"Configured wake word='{config.Host.WakeWord}', processingSilence={config.Host.ProcessingSilenceSeconds}s, endSilence={config.Host.EndSilenceSeconds}s.");
 
             // Optional full-session recording (from app start until quit)
-            Console.Write("Record this session to a WAV file and collect transcriptions? (yes/no) ");
-            var recAns = (Console.ReadLine() ?? string.Empty).Trim().ToLowerInvariant();
+            string recAns = "no";
+            if (config.Host.SessionRecording.EnablePrompt)
+            {
+                Console.Write("Record this session to a WAV file and collect transcriptions? (yes/no) ");
+                recAns = (Console.ReadLine() ?? string.Empty).Trim().ToLowerInvariant();
+            }
             List<TranscriptionItem>? recordedItems = null;
             string? sessionJsonPath = null;
             if (recAns == "y" || recAns == "yes")
             {
-                Console.Write("Scenario folder (e.g., short-wake-word): ");
-                var scenario = (Console.ReadLine() ?? "session").Trim();
-                if (string.IsNullOrWhiteSpace(scenario)) scenario = "session";
+                string scenario;
+                if (config.Host.SessionRecording.EnablePrompt)
+                {
+                    Console.Write("Scenario folder (e.g., short-wake-word): ");
+                    scenario = (Console.ReadLine() ?? config.Host.SessionRecording.DefaultScenario).Trim();
+                    if (string.IsNullOrWhiteSpace(scenario)) scenario = config.Host.SessionRecording.DefaultScenario;
+                }
+                else
+                {
+                    scenario = config.Host.SessionRecording.DefaultScenario;
+                }
 
                 var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
-                var baseDir = Path.Combine(AppContext.BaseDirectory, "SampleRuns", scenario, stamp);
+                var runsBase = Path.IsPathRooted(config.Host.SessionRecording.BaseDirectory)
+                    ? config.Host.SessionRecording.BaseDirectory
+                    : Path.Combine(AppContext.BaseDirectory, config.Host.SessionRecording.BaseDirectory);
+                var baseDir = Path.Combine(runsBase, scenario, stamp);
                 Directory.CreateDirectory(baseDir);
 
                 var wavPath = Path.Combine(baseDir, "audio.wav");
@@ -259,7 +303,7 @@ namespace Elara.Host
                     while (!cts.IsCancellationRequested)
                     {
                         csm.Tick(DateTimeOffset.UtcNow); // Drives silence-based transitions during idle periods
-                        await Task.Delay(200, cts.Token);
+                        await Task.Delay(config.Host.TickerIntervalMs, cts.Token);
                     }
                 }
                 catch (OperationCanceledException) { }
@@ -278,12 +322,12 @@ namespace Elara.Host
                 {
                     settings = new
                     {
-                        wakeWord = WakeWord,
+                        wakeWord = config.Host.WakeWord,
                         segmenter = config.Segmenter,
                         stt = new { modelFile = config.Stt.ModelFile }
                     },
                     transcripts = recordedItems,
-                    tolerances = new { cer = 0.25, wer = 0.4 }
+                    tolerances = new { cer = config.Host.SessionRecording.Tolerances.CER, wer = config.Host.SessionRecording.Tolerances.WER }
                 };
                 var json = JsonSerializer.Serialize(expectedObj, new JsonSerializerOptions { WriteIndented = true });
                 await File.WriteAllTextAsync(sessionJsonPath, json);

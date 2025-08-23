@@ -7,6 +7,16 @@ namespace Elara.Host.Configuration;
 public sealed class AppConfig
 {
     /// <summary>
+    /// Host-level settings (wake word, capacities, timers, session recording, etc.).
+    /// </summary>
+    public required HostConfig Host { get; init; }
+
+    /// <summary>
+    /// Logging settings (directories, file name pattern, levels).
+    /// </summary>
+    public required LoggingConfig Logging { get; init; }
+
+    /// <summary>
     /// Audio segmentation (VAD) parameters controlling when speech starts/ends.
     /// </summary>
     public required SegmenterConfig Segmenter { get; init; }
@@ -195,4 +205,65 @@ public sealed class TextToSpeechConfig
     public float Rate { get; init; } = 1.0f;
     /// <summary>Pitch multiplier (1.0 = normal).</summary>
     public float Pitch { get; init; } = 1.0f;
+}
+
+/// <summary>
+/// Host-level settings for the sandbox wiring.
+/// </summary>
+public sealed class HostConfig
+{
+    /// <summary>Wake word used by the conversation FSM.</summary>
+    public string WakeWord { get; init; } = "elara";
+    /// <summary>Silence duration (seconds) before processing LLM.</summary>
+    public int ProcessingSilenceSeconds { get; init; } = 8;
+    /// <summary>Silence duration (seconds) to return to quiescent.</summary>
+    public int EndSilenceSeconds { get; init; } = 60;
+    /// <summary>Capacity for audio chunk channel.</summary>
+    public int AudioQueueCapacity { get; init; } = 16;
+    /// <summary>Capacity for transcription channel.</summary>
+    public int TranscriptionQueueCapacity { get; init; } = 64;
+    /// <summary>Interval (ms) for FSM ticker.</summary>
+    public int TickerIntervalMs { get; init; } = 200;
+
+    /// <summary>Full-session recording configuration.</summary>
+    public SessionRecordingConfig SessionRecording { get; init; } = new();
+}
+
+/// <summary>
+/// Configuration for optional session recording.
+/// </summary>
+public sealed class SessionRecordingConfig
+{
+    /// <summary>If true, prompt on startup; if false, auto-use default scenario path.</summary>
+    public bool EnablePrompt { get; init; } = true;
+    /// <summary>Default scenario name when not prompted or empty input.</summary>
+    public string DefaultScenario { get; init; } = "session";
+    /// <summary>Base directory (relative to base) for sample runs.</summary>
+    public string BaseDirectory { get; init; } = "SampleRuns";
+    /// <summary>CER/WER tolerances emitted to expected.json.</summary>
+    public SessionToleranceConfig Tolerances { get; init; } = new();
+}
+
+/// <summary>
+/// Error tolerances used in expected.json for session runs.
+/// </summary>
+public sealed class SessionToleranceConfig
+{
+    public double CER { get; init; } = 0.25;
+    public double WER { get; init; } = 0.4;
+}
+
+/// <summary>
+/// Logging configuration for file/console output.
+/// </summary>
+public sealed class LoggingConfig
+{
+    /// <summary>Minimum level: Debug|Info|Warn|Error.</summary>
+    public string Level { get; init; } = "Debug";
+    /// <summary>Directory for log files (relative or absolute).</summary>
+    public string Directory { get; init; } = "Logs";
+    /// <summary>File name pattern supporting {date:format} token.</summary>
+    public string FileNamePattern { get; init; } = "sandbox-{date:yyyyMMdd}.log";
+    /// <summary>Console timestamp format (e.g., "HH:mm:ss ").</summary>
+    public string ConsoleTimestampFormat { get; init; } = "HH:mm:ss ";
 }
