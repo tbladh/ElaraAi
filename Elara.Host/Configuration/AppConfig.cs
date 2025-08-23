@@ -1,3 +1,5 @@
+using Elara.Host.Utilities;
+
 namespace Elara.Host.Configuration;
 
 /// <summary>
@@ -32,6 +34,11 @@ public sealed class AppConfig
     /// Text-to-speech settings.
     /// </summary>
     public required TextToSpeechConfig TextToSpeech { get; init; }
+
+    /// <summary>
+    /// Short randomized phrases for acknowledgements.
+    /// </summary>
+    public AnnouncementsOptions Announcements { get; init; } = new();
 
     /*public static AppConfig Default => new AppConfig
     {

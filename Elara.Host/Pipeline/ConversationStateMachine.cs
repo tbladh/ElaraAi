@@ -44,6 +44,11 @@ public sealed class ConversationStateMachine
     public event Action<string>? PromptReady;
 
     /// <summary>
+    /// Raised on any state change with previous mode, new mode, reason, and timestamp.
+    /// </summary>
+    public event Action<ConversationMode, ConversationMode, string, DateTimeOffset>? StateChanged;
+
+    /// <summary>
     /// UTC timestamp when Listening started, if any.
     /// </summary>
     public DateTimeOffset? ListeningSince { get; private set; }
@@ -166,9 +171,11 @@ public sealed class ConversationStateMachine
     /// </summary>
     private void TransitionToListening(DateTimeOffset nowUtc, string reason)
     {
+        var from = Mode;
         Mode = ConversationMode.Listening;
         ListeningSince = nowUtc;
         LastHeardAt = null;
+        try { StateChanged?.Invoke(from, Mode, reason, nowUtc); } catch { }
         Log($"-> Listening ({reason})");
     }
 
@@ -177,10 +184,12 @@ public sealed class ConversationStateMachine
     /// </summary>
     private void TransitionToQuiescent(string reason)
     {
+        var from = Mode;
         Mode = ConversationMode.Quiescent;
         ListeningSince = null;
         LastHeardAt = null;
         _buffer.Clear();
+        try { StateChanged?.Invoke(from, Mode, reason, DateTimeOffset.UtcNow); } catch { }
         Log($"-> Quiescent ({reason})");
     }
 
@@ -189,8 +198,10 @@ public sealed class ConversationStateMachine
     /// </summary>
     private void TransitionToProcessing(string reason)
     {
+        var from = Mode;
         Mode = ConversationMode.Processing;
         Log($"Listening -> Processing ({reason})");
+        try { StateChanged?.Invoke(from, Mode, reason, DateTimeOffset.UtcNow); } catch { }
         if (_buffer.Count > 0)
         {
             var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
@@ -209,8 +220,10 @@ public sealed class ConversationStateMachine
         {
             if (Mode != ConversationMode.Speaking)
             {
+                var from = Mode;
                 Mode = ConversationMode.Speaking;
                 _buffer.Clear();
+                try { StateChanged?.Invoke(from, Mode, "begin speaking", DateTimeOffset.UtcNow); } catch { }
                 Log("-> Speaking (audio output in progress)");
             }
         }
@@ -225,7 +238,10 @@ public sealed class ConversationStateMachine
         {
             if (Mode == ConversationMode.Speaking)
             {
-                TransitionToListening(DateTimeOffset.UtcNow, "speech completed");
+                var now = DateTimeOffset.UtcNow;
+                var from = Mode;
+                TransitionToListening(now, "speech completed");
+                // TransitionToListening already raises StateChanged
             }
         }
     }
@@ -239,7 +255,9 @@ public sealed class ConversationStateMachine
         {
             if (Mode == ConversationMode.Processing)
             {
-                TransitionToListening(DateTimeOffset.UtcNow, "processing completed");
+                var now = DateTimeOffset.UtcNow;
+                TransitionToListening(now, "processing completed");
+                // TransitionToListening already raises StateChanged
             }
         }
     }

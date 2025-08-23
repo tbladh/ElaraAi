@@ -88,6 +88,9 @@ namespace Elara.Host
             // First message: how to terminate without closing the window
             Logger.Info("Program", "Press 'Q' to quit or use Ctrl+C to stop.");
 
+            // Bind announcements from config
+            var announcer = Announcements.FromOptions(config.Announcements);
+
             // Parse command-line: --record[=scenario]
             bool recordingEnabled = false;
             string? recordScenario = null;
@@ -186,6 +189,28 @@ namespace Elara.Host
             var llm = host.Services.GetRequiredService<ILanguageModelService>();
             var tts = host.Services.GetRequiredService<ITextToSpeechService>();
             var ttsEnabled = config.TextToSpeech.Enabled;
+
+            // Announcements listener for state transitions
+            csm.StateChanged += async (from, to, reason, at) =>
+            {
+                try
+                {
+                    if (!ttsEnabled) return;
+                    if (from == ConversationMode.Quiescent && to == ConversationMode.Listening)
+                    {
+                        await tts.SpeakToDefaultOutputAsync(announcer.AcknowledgeWakeWord);
+                    }
+                    else if (from == ConversationMode.Listening && to == ConversationMode.Processing)
+                    {
+                        await tts.SpeakToDefaultOutputAsync(announcer.AcknowledgePrompt);
+                    }
+                    else if (from == ConversationMode.Listening && to == ConversationMode.Quiescent)
+                    {
+                        await tts.SpeakToDefaultOutputAsync(announcer.AcknowledgeQuiescence);
+                    }
+                }
+                catch { /* best-effort announcement */ }
+            };
             csm.PromptReady += (prompt) =>
             {
                 Task.Run(async () =>
