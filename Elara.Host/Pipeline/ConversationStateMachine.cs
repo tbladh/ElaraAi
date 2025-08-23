@@ -36,6 +36,15 @@ public sealed class ConversationStateMachine
     private readonly ILog _log;
     private readonly object _sync = new();
 
+    /// <summary>
+    /// UTC timestamp when the current <see cref="Mode"/> was entered. Updated on every transition.
+    /// </summary>
+    public DateTimeOffset ModeEnteredAt { get; private set; } = DateTimeOffset.UtcNow;
+
+    // Edge-trigger guard: ensure we only consider Processing once per Listening session
+    // (until new meaningful speech arrives). Prevents log spam when buffer is empty.
+    private bool _processingConsidered;
+
     // Emitted when we switch to Processing due to a brief silence window.
     // Carries the aggregated buffered text as a single prompt string.
     /// <summary>
@@ -113,6 +122,8 @@ public sealed class ConversationStateMachine
                         // Record last speech time and accumulate meaningful text to buffer.
                         LastHeardAt = timestampUtc;
                         _buffer.Add(new TranscriptionItem { TimestampUtc = timestampUtc, Text = text, IsMeaningful = true });
+                        // New speech resets processing consideration edge
+                        _processingConsidered = false;
                     }
 
                     // Evaluate silence windows
@@ -141,28 +152,30 @@ public sealed class ConversationStateMachine
         if (Mode != ConversationMode.Listening)
             return;
 
-        var anchor = LastHeardAt ?? ListeningSince ?? nowUtc;
-        var silence = nowUtc - anchor;
+        // Separate timers for clarity and to avoid anchor mutation side-effects
+        var sinceLastMeaningful = nowUtc - (LastHeardAt ?? ListeningSince ?? nowUtc);
+        var sinceListeningStart = nowUtc - (ListeningSince ?? nowUtc);
 
-        if (silence >= ProcessingSilence)
+        if (!_processingConsidered && sinceLastMeaningful >= ProcessingSilence)
         {
             if (_buffer.Count > 0)
             {
                 // Listening -> Processing: emit buffered prompt once.
-                TransitionToProcessing(reason: $"silence {silence.TotalSeconds:F1}s");
+                TransitionToProcessing(reason: $"silence {sinceLastMeaningful.TotalSeconds:F1}s");
+                _processingConsidered = true;
             }
             else
             {
-                // No content captured; keep listening and reset anchor to avoid immediate retrigger
-                ListeningSince = nowUtc;
+                // No content captured; keep listening, do not reset anchors to allow EndSilence to accrue
                 Log("Skip Processing: empty buffer");
+                _processingConsidered = true;
             }
         }
 
-        if (silence >= EndSilence)
+        if (sinceListeningStart >= EndSilence)
         {
             // Listening -> Quiescent on extended silence.
-            TransitionToQuiescent(reason: $"extended silence {silence.TotalSeconds:F1}s");
+            TransitionToQuiescent(reason: $"extended silence {sinceListeningStart.TotalSeconds:F1}s");
         }
     }
 
@@ -175,6 +188,8 @@ public sealed class ConversationStateMachine
         Mode = ConversationMode.Listening;
         ListeningSince = nowUtc;
         LastHeardAt = null;
+        ModeEnteredAt = nowUtc;
+        _processingConsidered = false;
         try { StateChanged?.Invoke(from, Mode, reason, nowUtc); } catch { }
         Log($"-> Listening ({reason})");
     }
@@ -189,7 +204,9 @@ public sealed class ConversationStateMachine
         ListeningSince = null;
         LastHeardAt = null;
         _buffer.Clear();
-        try { StateChanged?.Invoke(from, Mode, reason, DateTimeOffset.UtcNow); } catch { }
+        var now = DateTimeOffset.UtcNow;
+        ModeEnteredAt = now;
+        try { StateChanged?.Invoke(from, Mode, reason, now); } catch { }
         Log($"-> Quiescent ({reason})");
     }
 
@@ -201,7 +218,9 @@ public sealed class ConversationStateMachine
         var from = Mode;
         Mode = ConversationMode.Processing;
         Log($"Listening -> Processing ({reason})");
-        try { StateChanged?.Invoke(from, Mode, reason, DateTimeOffset.UtcNow); } catch { }
+        var now = DateTimeOffset.UtcNow;
+        ModeEnteredAt = now;
+        try { StateChanged?.Invoke(from, Mode, reason, now); } catch { }
         if (_buffer.Count > 0)
         {
             var joined = string.Join(" ", _buffer.ConvertAll(i => i.Text));
@@ -223,7 +242,9 @@ public sealed class ConversationStateMachine
                 var from = Mode;
                 Mode = ConversationMode.Speaking;
                 _buffer.Clear();
-                try { StateChanged?.Invoke(from, Mode, "begin speaking", DateTimeOffset.UtcNow); } catch { }
+                var now = DateTimeOffset.UtcNow;
+                ModeEnteredAt = now;
+                try { StateChanged?.Invoke(from, Mode, "begin speaking", now); } catch { }
                 Log("-> Speaking (audio output in progress)");
             }
         }
