@@ -11,7 +11,9 @@ using Elara.Host.Core.Interfaces;
 namespace Elara.Host.Speech
 {
     /// <summary>
-    /// Minimal Whisper.net-backed STT for the sandbox
+    /// Minimal Whisper.net–backed speech-to-text (STT) implementation used by the sandbox host.
+    /// This service lazily initializes a <see cref="WhisperFactory"/> from a local model file and
+    /// exposes simple transcription APIs for full streams, files, and chunked streaming.
     /// </summary>
     public sealed class SpeechToTextService : ISpeechToTextService, IDisposable
     {
@@ -20,6 +22,11 @@ namespace Elara.Host.Speech
         private readonly SemaphoreSlim _initSemaphore = new(1, 1);
         private bool _isInitialized;
 
+        /// <summary>
+        /// Creates a new STT service that will load the Whisper model from the given absolute or relative file path.
+        /// </summary>
+        /// <param name="modelPath">Path to a Whisper model file (e.g., ggml-*.bin). The file must exist ahead of time.</param>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="modelPath"/> is null or whitespace.</exception>
         public SpeechToTextService(string modelPath)
         {
             if (string.IsNullOrWhiteSpace(modelPath))
@@ -27,6 +34,10 @@ namespace Elara.Host.Speech
             _modelPath = modelPath;
         }
 
+        /// <summary>
+        /// One-time lazy initialization. Verifies the model file exists and creates the Whisper factory.
+        /// Thread-safe via <see cref="SemaphoreSlim"/>.
+        /// </summary>
         private async Task InitializeAsync()
         {
             await _initSemaphore.WaitAsync().ConfigureAwait(false);
@@ -50,6 +61,11 @@ namespace Elara.Host.Speech
             }
         }
 
+        /// <summary>
+        /// Transcribes the provided audio stream using Whisper and returns the full concatenated text.
+        /// </summary>
+        /// <param name="audioStream">Audio stream containing WAV/PCM data compatible with Whisper.net.</param>
+        /// <returns>Trimmed transcription text, possibly empty if no speech detected.</returns>
         public async Task<string> TranscribeAsync(Stream audioStream)
         {
             await InitializeAsync().ConfigureAwait(false);
@@ -64,12 +80,24 @@ namespace Elara.Host.Speech
             return result.Trim();
         }
 
+        /// <summary>
+        /// Transcribes an audio file by path.
+        /// </summary>
+        /// <param name="audioFilePath">Path to an audio file readable by Whisper.net.</param>
+        /// <returns>Transcribed text.</returns>
         public async Task<string> TranscribeFileAsync(string audioFilePath)
         {
             await using var fs = File.OpenRead(audioFilePath);
             return await TranscribeAsync(fs).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Incrementally transcribes audio data from a byte-stream. The service buffers until a threshold
+        /// (~1s at 16kHz mono) and then yields segments. Honors <paramref name="cancellationToken"/>.
+        /// </summary>
+        /// <param name="audioStream">Asynchronous sequence of raw audio byte buffers.</param>
+        /// <param name="cancellationToken">Cancellation token to stop streaming and return immediately.</param>
+        /// <returns>Asynchronously yields <see cref="TranscriptionSegment"/> as they are produced.</returns>
         public async IAsyncEnumerable<TranscriptionSegment> TranscribeStreamAsync(
             IAsyncEnumerable<byte[]> audioStream,
             [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -80,7 +108,7 @@ namespace Elara.Host.Speech
             await foreach (var chunk in audioStream.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
                 buffer.Write(chunk, 0, chunk.Length);
-                if (buffer.Length >= 32000) // ~1s at 16kHz 16-bit mono
+                if (buffer.Length >= 32000) // ~1s at 16kHz 16-bit mono (heuristic batch size)
                 {
                     buffer.Position = 0;
                     using (var processor = _factory!.CreateBuilder().WithLanguage("en").Build())
@@ -123,6 +151,9 @@ namespace Elara.Host.Speech
 
         // Model acquisition handled by Tools.FileDownloader
 
+        /// <summary>
+        /// Disposes internal resources, including the initialization semaphore.
+        /// </summary>
         public void Dispose()
         {
             _factory = null;

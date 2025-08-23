@@ -28,6 +28,10 @@ public sealed class Streamer
     private int _metricsFrames;
     private double _noiseFloorRms; // adaptive noise floor
 
+    /// <summary>
+    /// Creates a new streamer that reads raw audio from <see cref="IAudioProcessor"/> and writes WAV segments to a channel.
+    /// Segmentation is driven by RMS and active sample ratio thresholds in <see cref="SegmenterConfig"/>.
+    /// </summary>
     public Streamer(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, SegmenterConfig cfg, ILog log)
     {
         _audio = audio;
@@ -46,6 +50,10 @@ public sealed class Streamer
         _sessionWriter = writer;
     }
 
+    /// <summary>
+    /// Main loop: captures audio, assembles fixed-size frames, performs VAD/burst logic, and emits WAV segments to the channel.
+    /// Completes the writer when the audio stream ends or cancellation is requested.
+    /// </summary>
     public async Task RunAsync(CancellationToken token)
     {
         var fmt = new WaveFormat(_cfg.SampleRate, _cfg.Channels);
@@ -249,6 +257,9 @@ public sealed class Streamer
         _sessionWriter?.Dispose();
     }
 
+    /// <summary>
+    /// Emits periodic metrics as a compact JSON line when enabled via configuration.
+    /// </summary>
     private void MaybeEmitMetrics(bool inSpeech)
     {
         if (!_cfg.EnableMetrics) return;
@@ -272,6 +283,9 @@ public sealed class Streamer
         _metricsFrames = 0;
     }
 
+    /// <summary>
+    /// Computes per-frame RMS, active sample ratio, and peak absolute value for simple VAD.
+    /// </summary>
     private void AnalyzeFrame(byte[] frame, WaveFormat fmt, out double rms, out double activeRatio, out double peakAbs)
     {
         // 16-bit PCM little-endian assumed
@@ -295,6 +309,9 @@ public sealed class Streamer
         peakAbs = peak;
     }
 
+    /// <summary>
+    /// Sliding-window threshold check for entering speech state.
+    /// </summary>
     private bool IsEnter(double rms, double activeRatio, ref int counter, double enterRms, double enterAct)
     {
         if (rms >= enterRms || activeRatio >= enterAct)
@@ -309,6 +326,9 @@ public sealed class Streamer
         return false;
     }
 
+    /// <summary>
+    /// Sliding-window threshold check for exiting speech state.
+    /// </summary>
     private bool IsExit(double rms, double activeRatio, ref int counter, double exitRms, double exitAct)
     {
         if (rms <= exitRms && activeRatio <= exitAct)
@@ -323,6 +343,9 @@ public sealed class Streamer
         return false;
     }
 
+    /// <summary>
+    /// Builds a WAV stream from collected frames (with optional post-padding) and writes an <see cref="AudioChunk"/> to the channel.
+    /// </summary>
     private async Task EmitSegmentAsync(List<byte[]> frames, WaveFormat fmt, long seq, CancellationToken token, string reason)
     {
         // Build WAV in-memory

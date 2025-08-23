@@ -10,7 +10,8 @@ using NAudio.Wave;
 namespace Elara.Host.Audio
 {
     /// <summary>
-    /// Minimal AudioProcessor using NAudio, adapted for sandbox
+    /// Minimal <see cref="IAudioProcessor"/> using NAudio for recording and playback in the sandbox.
+    /// Recording lifecycle is serialized by a semaphore to prevent overlapping Start/Stop calls.
     /// </summary>
     public class AudioProcessor : IAudioProcessor, IDisposable
     {
@@ -25,11 +26,20 @@ namespace Elara.Host.Audio
         private TaskCompletionSource<bool>? _recordingStoppedTcs;
         private long _bytesWritten;
 
+        /// <summary>
+        /// Constructs the processor with the desired PCM format.
+        /// </summary>
+        /// <param name="sampleRate">Sample rate in Hz (default 16000).</param>
+        /// <param name="channels">Channel count (default 1 = mono).</param>
         public AudioProcessor(int sampleRate = 16000, int channels = 1)
         {
             _waveFormat = new WaveFormat(sampleRate, channels);
         }
 
+        /// <summary>
+        /// Starts microphone capture to an in-memory WAV stream. Waits up to 1s for first audio to arrive
+        /// to fail fast if the input device is unavailable.
+        /// </summary>
         public async Task StartRecordingAsync()
         {
             await _recordingSemaphore.WaitAsync().ConfigureAwait(false);
@@ -86,6 +96,11 @@ namespace Elara.Host.Audio
             }
         }
 
+        /// <summary>
+        /// Stops microphone capture and returns a new seekable stream positioned at 0.
+        /// Throws if total bytes are less than ~1s of audio to avoid downstream STT failures.
+        /// </summary>
+        /// <returns>MemoryStream containing a complete WAV.</returns>
         public async Task<Stream> StopRecordingAsync()
         {
             await _recordingSemaphore.WaitAsync().ConfigureAwait(false);
@@ -145,6 +160,10 @@ namespace Elara.Host.Audio
             }
         }
 
+        /// <summary>
+        /// Provides a live raw byte stream from the microphone as an async enumerable.
+        /// Each yielded buffer contains a copy of the input device buffer. Honors cancellation.
+        /// </summary>
         public async IAsyncEnumerable<byte[]> GetAudioStreamAsync(CancellationToken cancellationToken)
         {
             var waveIn = new WaveInEvent
@@ -206,6 +225,10 @@ namespace Elara.Host.Audio
             }
         }
 
+        /// <summary>
+        /// Plays a WAV stream to the default output device, blocking until playback completes.
+        /// </summary>
+        /// <param name="audioData">WAV stream; position will be reset to 0.</param>
         public Task PlayAudioAsync(Stream audioData)
         {
             return Task.Run(() =>
@@ -223,6 +246,9 @@ namespace Elara.Host.Audio
             });
         }
 
+        /// <summary>
+        /// Releases unmanaged resources and disposes active NAudio objects if present.
+        /// </summary>
         public void Dispose()
         {
             _waveIn?.Dispose();

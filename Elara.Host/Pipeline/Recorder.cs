@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -7,6 +8,10 @@ using Elara.Host.Logging;
 
 namespace Elara.Host.Pipeline;
 
+/// <summary>
+/// Simple time-sliced recorder that produces fixed-duration <see cref="AudioChunk"/> items.
+/// Uses <see cref="IAudioProcessor"/> start/stop to acquire a WAV per slice; primarily for debugging/tests.
+/// </summary>
 public sealed class Recorder
 {
     private readonly IAudioProcessor _audio;
@@ -14,6 +19,9 @@ public sealed class Recorder
     private readonly int _chunkMs;
     private readonly ILog _log;
 
+    /// <summary>
+    /// Create a new recorder that writes chunks of length <paramref name="chunkMs"/> to <paramref name="writer"/>.
+    /// </summary>
     public Recorder(IAudioProcessor audio, ChannelWriter<AudioChunk> writer, int chunkMs, ILog log)
     {
         _audio = audio;
@@ -23,6 +31,10 @@ public sealed class Recorder
         _log.Info("reporting in");
     }
 
+    /// <summary>
+    /// Loop: start recording, wait for the configured slice duration, stop and emit a chunk.
+    /// Caller cancels via <see cref="CancellationToken"/>. Completes channel on exit.
+    /// </summary>
     public async Task RunAsync(CancellationToken token)
     {
         long seq = 0;

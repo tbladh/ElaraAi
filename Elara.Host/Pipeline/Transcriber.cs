@@ -9,6 +9,11 @@ using NAudio.Wave;
 
 namespace Elara.Host.Pipeline;
 
+/// <summary>
+/// Transcribes audio chunks from an input channel into text using an <see cref="ISpeechToTextService"/>.
+/// Applies a simple RMS-based silence gate and a minimal word-count heuristic to mark items as meaningful.
+/// Writes <see cref="TranscriptionItem"/> objects into the downstream channel for the FSM to consume.
+/// </summary>
 public sealed class Transcriber
 {
     private readonly ISpeechToTextService _stt;
@@ -17,9 +22,13 @@ public sealed class Transcriber
     private readonly ILog _log;
     private bool _inSilenceRun;
 
+    // Heuristics for classifying a transcription as meaningful.
     private const int MinWords = 1; // relaxed heuristic for sensitivity
     private const double RmsSilenceThreshold = 0.015; // ~1.5% full scale (tweak as needed)
 
+    /// <summary>
+    /// Create a transcriber connected to input audio <paramref name="reader"/> and optional output <paramref name="outWriter"/>.
+    /// </summary>
     public Transcriber(ISpeechToTextService stt, ChannelReader<AudioChunk> reader, ChannelWriter<TranscriptionItem>? outWriter = null, ILog? log = null)
     {
         _stt = stt;
@@ -29,10 +38,14 @@ public sealed class Transcriber
         _log.Info("reporting in");
     }
 
+    /// <summary>
+    /// Main loop that reads audio chunks, performs optional RMS gating, calls STT, and publishes <see cref="TranscriptionItem"/>s.
+    /// </summary>
     public async Task RunAsync(CancellationToken token)
     {
         try
         {
+            // Iterate over incoming audio chunks until cancellation.
             await foreach (var chunk in _reader.ReadAllAsync(token))
             {
                 try
@@ -42,12 +55,14 @@ public sealed class Transcriber
                     string text;
                     if (rms < RmsSilenceThreshold)
                     {
+                        // Treat as silence: do not call STT; produce empty text item.
                         text = string.Empty;
                         // Reset position for any downstream readers
                         if (chunk.Stream.CanSeek) chunk.Stream.Position = 0;
                     }
                     else
                     {
+                        // Non-silent: call STT to obtain transcription.
                         if (chunk.Stream.CanSeek) chunk.Stream.Position = 0; // reset after analysis
                         text = await _stt.TranscribeAsync(chunk.Stream);
                     }
@@ -97,6 +112,7 @@ public sealed class Transcriber
                 }
                 finally
                 {
+                    // Ensure audio resources are disposed
                     await chunk.DisposeAsync();
                 }
             }
@@ -111,6 +127,9 @@ public sealed class Transcriber
         }
     }
 
+    /// <summary>
+    /// Count words using whitespace splitting.
+    /// </summary>
     private static int CountWords(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return 0;
@@ -118,6 +137,10 @@ public sealed class Transcriber
         return parts.Length;
     }
 
+    /// <summary>
+    /// Compute RMS energy of a WAV stream by reading samples and averaging squares.
+    /// Returns 0.0 on failure as a conservative silence default.
+    /// </summary>
     private static double ComputeRms(Stream wavStream)
     {
         try

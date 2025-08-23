@@ -16,6 +16,10 @@ using Elara.Host.Pipeline;
 
 namespace Elara.Host
 {
+    /// <summary>
+    /// Sandbox host wiring audio capture, transcription, conversation FSM, LLM, and TTS.
+    /// The FSM governs transitions: Quiescent -> Listening -> Processing -> (Speaking) -> Listening.
+    /// </summary>
     internal class Program
     {
         // Tunables for this sandbox
@@ -25,6 +29,9 @@ namespace Elara.Host
         private const int ProcessingSilenceSeconds = 8;  // after 5s of silence, enter processing
         private const int EndSilenceSeconds = 60;        // after 60s of silence, return to quiescent
 
+        /// <summary>
+        /// Entry point that composes the pipeline and runs until canceled.
+        /// </summary>
         private static async Task Main(string[] args)
         {
             using var cts = new CancellationTokenSource();
@@ -95,6 +102,7 @@ namespace Elara.Host
 
             Logger.Debug("Program", "Host built and services configured.");
 
+            // Channel for audio chunks from Streamer -> Transcriber
             var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(AudioQueueCapacity)
             {
                 FullMode = BoundedChannelFullMode.DropOldest,
@@ -102,7 +110,7 @@ namespace Elara.Host
                 SingleWriter = true
             });
 
-            // Transcription pipeline channel (producer: Transcriber, consumer: future aggregator)
+            // Transcription pipeline channel (producer: Transcriber, consumer: FSM consumer loop)
             var transcriptionChannel = Channel.CreateBounded<TranscriptionItem>(new BoundedChannelOptions(64)
             {
                 FullMode = BoundedChannelFullMode.DropOldest,
@@ -110,18 +118,21 @@ namespace Elara.Host
                 SingleWriter = true
             });
 
+            // Streamer records and segments audio according to config.Segmenter and writes to audioChannel
             var streamer = new Streamer(
                 host.Services.GetRequiredService<IAudioProcessor>(),
                 audioChannel.Writer,
                 config.Segmenter,
                 new ComponentLogger("Streamer"));
 
+            // FSM manages conversation transitions; Transcriber feeds it via transcriptionChannel
             var csm = new ConversationStateMachine(
                 WakeWord,
                 TimeSpan.FromSeconds(ProcessingSilenceSeconds),
                 TimeSpan.FromSeconds(EndSilenceSeconds),
                 new ComponentLogger("Conversation"));
 
+            // Transcriber consumes audio chunks -> STT -> TranscriptionItem -> transcriptionChannel
             var transcriber = new Transcriber(
                 host.Services.GetRequiredService<ISpeechToTextService>(),
                 audioChannel.Reader,
@@ -139,7 +150,7 @@ namespace Elara.Host
                     try
                     {
                         Logger.Info("AI", "Calling language model...");
-                        var reply = await llm.GetResponseAsync(prompt, cts.Token);
+                        var reply = await llm.GetResponseAsync(prompt, cts.Token); // Processing -> model call
                         Logger.Info("AI", $"Response: {reply}");
                         if (ttsEnabled)
                         {
@@ -151,12 +162,12 @@ namespace Elara.Host
                             }
                             finally
                             {
-                                csm.EndSpeaking();
+                                csm.EndSpeaking(); // Speaking -> Listening
                             }
                         }
                         else
                         {
-                            // No audio output: end processing explicitly
+                            // No audio output: end processing explicitly (Processing -> Listening)
                             csm.EndProcessing();
                         }
                     }
@@ -230,7 +241,7 @@ namespace Elara.Host
                 {
                     await foreach (var item in transcriptionChannel.Reader.ReadAllAsync(cts.Token))
                     {
-                        csm.HandleTranscription(item);
+                        csm.HandleTranscription(item); // Feeds FSM: wake detection, buffering, silence evaluation
                         if (recordedItems != null)
                         {
                             recordedItems.Add(item);
@@ -247,7 +258,7 @@ namespace Elara.Host
                 {
                     while (!cts.IsCancellationRequested)
                     {
-                        csm.Tick(DateTimeOffset.UtcNow);
+                        csm.Tick(DateTimeOffset.UtcNow); // Drives silence-based transitions during idle periods
                         await Task.Delay(200, cts.Token);
                     }
                 }

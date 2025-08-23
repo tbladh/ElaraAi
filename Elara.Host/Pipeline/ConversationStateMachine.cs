@@ -3,26 +3,59 @@ using System.Collections.Generic;
 using Elara.Host.Logging;
 
 namespace Elara.Host.Pipeline;
+/// <summary>
+/// Coordinates the conversation flow between Quiescent, Listening, Processing, and Speaking.
+/// Keeps responsibilities limited to state transitions and emitting a prompt when entering Processing.
+/// While in Processing or Speaking, incoming transcriptions are ignored.
+/// </summary>
 // TODO: Should handle maximum rambling cut-off (e.g., user keeps talking without pause).
 public sealed class ConversationStateMachine
 {
+    /// <summary>
+    /// Current conversation mode. Transitions are driven by wake word, silence timers,
+    /// and explicit calls from the host (e.g., BeginSpeaking/EndSpeaking).
+    /// </summary>
     public ConversationMode Mode { get; private set; } = ConversationMode.Quiescent;
+    /// <summary>
+    /// Convenience flag to indicate when the system is in <see cref="ConversationMode.Speaking"/>.
+    /// </summary>
     public bool IsSpeaking => Mode == ConversationMode.Speaking;
 
+    /// <summary>
+    /// Wake word that moves the FSM from Quiescent to Listening.
+    /// </summary>
     public string WakeWord { get; }
+    /// <summary>
+    /// Silence duration after which we enter Processing from Listening.
+    /// </summary>
     public TimeSpan ProcessingSilence { get; }
+    /// <summary>
+    /// Extended silence duration after which we return to Quiescent from Listening.
+    /// </summary>
     public TimeSpan EndSilence { get; }
     private readonly ILog _log;
     private readonly object _sync = new();
 
     // Emitted when we switch to Processing due to a brief silence window.
     // Carries the aggregated buffered text as a single prompt string.
+    /// <summary>
+    /// Raised once when transitioning Listening -&gt; Processing, carrying the buffered prompt.
+    /// </summary>
     public event Action<string>? PromptReady;
 
+    /// <summary>
+    /// UTC timestamp when Listening started, if any.
+    /// </summary>
     public DateTimeOffset? ListeningSince { get; private set; }
+    /// <summary>
+    /// UTC timestamp of the last meaningful transcription while Listening.
+    /// </summary>
     public DateTimeOffset? LastHeardAt { get; private set; }
     private readonly List<TranscriptionItem> _buffer = new();
 
+    /// <summary>
+    /// Construct a new <see cref="ConversationStateMachine"/> with wake word and silence parameters.
+    /// </summary>
     public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, ILog log)
     {
         WakeWord = wakeWord ?? string.Empty;
@@ -40,6 +73,7 @@ public sealed class ConversationStateMachine
     {
         lock (_sync)
         {
+            // Only Listening uses the silence windows for transitions.
             if (Mode == ConversationMode.Listening)
             {
                 EvaluateSilence(nowUtc);
@@ -47,6 +81,9 @@ public sealed class ConversationStateMachine
         }
     }
 
+    /// <summary>
+    /// Handle a transcription event by text components.
+    /// </summary>
     public void HandleTranscription(DateTimeOffset timestampUtc, string? text, bool meaningful)
     {
         lock (_sync)
@@ -58,6 +95,7 @@ public sealed class ConversationStateMachine
             switch (Mode)
             {
                 case ConversationMode.Quiescent:
+                    // Wake word moves Quiescent -> Listening.
                     if (hasWake)
                     {
                         TransitionToListening(timestampUtc, reason: $"wake word '{WakeWord}' detected");
@@ -67,6 +105,7 @@ public sealed class ConversationStateMachine
                 case ConversationMode.Listening:
                     if (meaningful)
                     {
+                        // Record last speech time and accumulate meaningful text to buffer.
                         LastHeardAt = timestampUtc;
                         _buffer.Add(new TranscriptionItem { TimestampUtc = timestampUtc, Text = text, IsMeaningful = true });
                     }
@@ -104,6 +143,7 @@ public sealed class ConversationStateMachine
         {
             if (_buffer.Count > 0)
             {
+                // Listening -> Processing: emit buffered prompt once.
                 TransitionToProcessing(reason: $"silence {silence.TotalSeconds:F1}s");
             }
             else
@@ -116,10 +156,14 @@ public sealed class ConversationStateMachine
 
         if (silence >= EndSilence)
         {
+            // Listening -> Quiescent on extended silence.
             TransitionToQuiescent(reason: $"extended silence {silence.TotalSeconds:F1}s");
         }
     }
 
+    /// <summary>
+    /// Transition to Listening with timestamps adjusted and logging.
+    /// </summary>
     private void TransitionToListening(DateTimeOffset nowUtc, string reason)
     {
         Mode = ConversationMode.Listening;
@@ -128,6 +172,9 @@ public sealed class ConversationStateMachine
         Log($"-> Listening ({reason})");
     }
 
+    /// <summary>
+    /// Transition to Quiescent and clear buffer.
+    /// </summary>
     private void TransitionToQuiescent(string reason)
     {
         Mode = ConversationMode.Quiescent;
@@ -137,6 +184,9 @@ public sealed class ConversationStateMachine
         Log($"-> Quiescent ({reason})");
     }
 
+    /// <summary>
+    /// Transition to Processing, emit the prompt by joining buffered items, and clear buffer.
+    /// </summary>
     private void TransitionToProcessing(string reason)
     {
         Mode = ConversationMode.Processing;
@@ -149,6 +199,10 @@ public sealed class ConversationStateMachine
         }
     }
 
+    /// <summary>
+    /// Enter Speaking state. The host should call this immediately before starting audio output.
+    /// Incoming transcriptions are ignored while speaking.
+    /// </summary>
     public void BeginSpeaking()
     {
         lock (_sync)
@@ -162,6 +216,9 @@ public sealed class ConversationStateMachine
         }
     }
 
+    /// <summary>
+    /// Exit Speaking and return to Listening to await user input.
+    /// </summary>
     public void EndSpeaking()
     {
         lock (_sync)
@@ -173,6 +230,9 @@ public sealed class ConversationStateMachine
         }
     }
 
+    /// <summary>
+    /// Exit Processing and return to Listening (used when there is no TTS, or after errors).
+    /// </summary>
     public void EndProcessing()
     {
         lock (_sync)
