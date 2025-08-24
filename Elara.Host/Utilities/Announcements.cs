@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Elara.Host.Utilities;
 
@@ -12,6 +13,7 @@ public sealed class Announcements
     private readonly string[] _ackWakeWord;
     private readonly string[] _ackPrompt;
     private readonly string[] _ackQuiescence;
+    private readonly string[] _startupTemplates;
 
     /// <summary>
     /// Constructs an Announcements helper.
@@ -19,18 +21,20 @@ public sealed class Announcements
     /// </summary>
     public Announcements(IEnumerable<string>? acknowledgeWakeWord = null,
                          IEnumerable<string>? acknowledgePrompt = null,
-                         IEnumerable<string>? acknowledgeQuiescence = null)
+                         IEnumerable<string>? acknowledgeQuiescence = null,
+                         IEnumerable<string>? startupTemplates = null)
     {
         _ackWakeWord = ToArrayOrDefaults(acknowledgeWakeWord, DefaultAcknowledgeWakeWord);
         _ackPrompt = ToArrayOrDefaults(acknowledgePrompt, DefaultAcknowledgePrompt);
         _ackQuiescence = ToArrayOrDefaults(acknowledgeQuiescence, DefaultAcknowledgeQuiescence);
+        _startupTemplates = ToArrayOrDefaults(startupTemplates, DefaultStartupTemplates);
     }
 
     /// <summary>
     /// Creates an instance from options typically bound from configuration.
     /// </summary>
     public static Announcements FromOptions(AnnouncementsOptions? options)
-        => new(options?.AcknowledgeWakeWord, options?.AcknowledgePrompt, options?.AcknowledgeQuiescence);
+        => new(options?.AcknowledgeWakeWord, options?.AcknowledgePrompt, options?.AcknowledgeQuiescence, options?.StartupTemplates);
 
     /// <summary>
     /// Returns a short random acknowledgement that the wake word was heard.
@@ -46,6 +50,23 @@ public sealed class Announcements
     /// Returns a short random acknowledgement prior to LLM processing.
     /// </summary>
     public string AcknowledgeQuiescence => Pick(_ackQuiescence);
+
+    /// <summary>
+    /// Renders a single deterministic startup announcement including key configuration values.
+    /// </summary>
+    public string RenderStartup(string wakeWord, string modelName, string modelBaseUrl, string? ttsVoice)
+    {
+        var voice = string.IsNullOrWhiteSpace(ttsVoice) ? "default voice" : ttsVoice;
+        // Choose template (random, but deterministic if only one exists)
+        var template = _startupTemplates.Length > 0 ? Pick(_startupTemplates) : DefaultStartupTemplates[0];
+        // Safe placeholder replacement; missing placeholders are ignored
+        string result = template
+            .Replace("{WakeWord}", wakeWord ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("{ModelName}", modelName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("{ModelBaseUrl}", modelBaseUrl ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("{Voice}", voice ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        return result;
+    }
 
     private static string Pick(IReadOnlyList<string> items)
     {
@@ -85,6 +106,11 @@ public sealed class Announcements
         "No one wants to talk to me",
     };
 
+    private static readonly string[] DefaultStartupTemplates = new[]
+    {
+        "Starting Elara. Wake word: '{WakeWord}'. Model: {ModelName} at {ModelBaseUrl}. Voice: '{Voice}'. Say the wake word to begin."
+    };
+
 }
 
 /// <summary>
@@ -98,4 +124,10 @@ public sealed class AnnouncementsOptions
     public IEnumerable<string>? AcknowledgePrompt { get; init; }
 
     public IEnumerable<string>? AcknowledgeQuiescence { get; init; }
+
+    /// <summary>
+    /// List of startup templates to randomly select from. If both this and StartupTemplate are null/empty,
+    /// defaults will be used.
+    /// </summary>
+    public IEnumerable<string>? StartupTemplates { get; init; }
 }

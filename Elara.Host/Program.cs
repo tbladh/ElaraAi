@@ -276,6 +276,21 @@ namespace Elara.Host
             Console.WriteLine($"Wake word: '{config.Host.WakeWord}', processing after {config.Host.ProcessingSilenceSeconds}s silence, end after {config.Host.EndSilenceSeconds}s silence.");
             Logger.Info("Program", $"Configured wake word='{config.Host.WakeWord}', processingSilence={config.Host.ProcessingSilenceSeconds}s, endSilence={config.Host.EndSilenceSeconds}s.");
 
+            // Startup deterministic announcement to pre-warm TTS and announce key settings
+            if (ttsEnabled)
+            {
+                try
+                {
+                    var startup = announcer.RenderStartup(
+                        config.Host.WakeWord,
+                        (llm as OllamaLanguageModelService)?.CurrentModel ?? "<model>",
+                        config.LanguageModel.BaseUrl,
+                        tts.CurrentVoice);
+                    await tts.SpeakToDefaultOutputAsync(startup);
+                }
+                catch { /* best-effort warmup announcement */ }
+            }
+
             // Optional full-session recording (from app start until quit), controlled by --record
             SessionRecording? session = null;
             if (recordingEnabled)
