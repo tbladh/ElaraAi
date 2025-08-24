@@ -190,6 +190,13 @@ namespace Elara.Host
             var tts = host.Services.GetRequiredService<ITextToSpeechService>();
             var ttsEnabled = config.TextToSpeech.Enabled;
 
+            // Suppression window to ignore transcriptions captured while the AI is Processing/Speaking
+            // This prevents feedback where speaker output is picked up by the mic and later processed.
+            var suppressTail = TimeSpan.FromMilliseconds(300); // small tail to cover playback trailing audio
+            int suppressFlag = 0; // 0 = off, 1 = on
+            DateTimeOffset? suppressStart = null;
+            DateTimeOffset? suppressEnd = null;
+
             // Announcements listener for state transitions
             csm.StateChanged += async (from, to, reason, at) =>
             {
@@ -210,6 +217,22 @@ namespace Elara.Host
                     }
                 }
                 catch { /* best-effort announcement */ }
+            };
+
+            // Maintain suppression flags/interval on any state change
+            csm.StateChanged += (from, to, reason, at) =>
+            {
+                if (to == ConversationMode.Processing || to == ConversationMode.Speaking)
+                {
+                    System.Threading.Interlocked.Exchange(ref suppressFlag, 1);
+                    suppressStart = at;
+                    suppressEnd = null;
+                }
+                else if (from == ConversationMode.Processing || from == ConversationMode.Speaking)
+                {
+                    System.Threading.Interlocked.Exchange(ref suppressFlag, 0);
+                    suppressEnd = at;
+                }
             };
             csm.PromptReady += (prompt) =>
             {
@@ -292,8 +315,23 @@ namespace Elara.Host
                 {
                     await foreach (var item in transcriptionChannel.Reader.ReadAllAsync(cts.Token))
                     {
-                        csm.HandleTranscription(item); // Feeds FSM: wake detection, buffering, silence evaluation
-                        session?.Add(item);
+                        // Drop any items captured during the last Processing/Speaking window (with a small tail)
+                        bool inSuppressedInterval = false;
+                        var ts = item.TimestampUtc;
+                        if (System.Threading.Volatile.Read(ref suppressFlag) == 1 && suppressStart.HasValue)
+                        {
+                            inSuppressedInterval = ts >= suppressStart.Value;
+                        }
+                        else if (suppressStart.HasValue && suppressEnd.HasValue)
+                        {
+                            inSuppressedInterval = ts >= suppressStart.Value && ts <= (suppressEnd.Value + suppressTail);
+                        }
+
+                        if (!inSuppressedInterval)
+                        {
+                            csm.HandleTranscription(item);
+                            session?.Add(item);
+                        }
                     }
                 }
                 catch (OperationCanceledException) { }
