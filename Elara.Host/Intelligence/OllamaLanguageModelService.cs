@@ -1,7 +1,10 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Elara.Host.Core.Interfaces;
+using Elara.Host.Logging;
+using Elara.Host.Extensions;
 
 namespace Elara.Host.Intelligence
 {
@@ -111,6 +114,14 @@ namespace Elara.Host.Intelligence
                 await _generateLock.WaitAsync(cancellationToken);
                 try
                 {
+                    // Debug log of full JSON payload being sent to the LLM
+                    try
+                    {
+                        var json = request.ToPrettyJson();
+                        Logger.Debug("LLM", $"Sending prompt to LLM:\n{json}");
+                    }
+                    catch { /* logging best-effort */ }
+
                     var resp = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
                     resp.EnsureSuccessStatusCode();
                     var result = await resp.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cancellationToken: cancellationToken);

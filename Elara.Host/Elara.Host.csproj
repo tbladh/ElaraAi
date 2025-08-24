@@ -38,6 +38,10 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Extensions\" />
+  </ItemGroup>
+
   <!-- Internalized minimal dependencies; no project references needed -->
 
 </Project>

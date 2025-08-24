@@ -318,13 +318,16 @@ namespace Elara.Host
                         // Drop any items captured during the last Processing/Speaking window (with a small tail)
                         bool inSuppressedInterval = false;
                         var ts = item.TimestampUtc;
-                        if (System.Threading.Volatile.Read(ref suppressFlag) == 1 && suppressStart.HasValue)
+                        if (Volatile.Read(ref suppressFlag) != 1 || !suppressStart.HasValue)
+                        {
+                            if (suppressStart.HasValue && suppressEnd.HasValue)
+                            {
+                                inSuppressedInterval = ts >= suppressStart.Value && ts <= (suppressEnd.Value + suppressTail);
+                            }
+                        }
+                        else
                         {
                             inSuppressedInterval = ts >= suppressStart.Value;
-                        }
-                        else if (suppressStart.HasValue && suppressEnd.HasValue)
-                        {
-                            inSuppressedInterval = ts >= suppressStart.Value && ts <= (suppressEnd.Value + suppressTail);
                         }
 
                         if (!inSuppressedInterval)
