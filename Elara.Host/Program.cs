@@ -65,12 +65,12 @@ namespace Elara.Host
                 return pattern;
             }
 
-            var resolvedLogDir = ResolveLogPath(AppContext.BaseDirectory, config.Logging.Directory);
+            var resolvedLogDir = ResolveLogPath(AppContext.BaseDirectory, config.ElaraLogging.Directory);
             Directory.CreateDirectory(resolvedLogDir);
-            var logFile = Path.Combine(resolvedLogDir, RenderFileNamePattern(config.Logging.FileNamePattern));
+            var logFile = Path.Combine(resolvedLogDir, RenderFileNamePattern(config.ElaraLogging.FileNamePattern));
 
             // Map string level to enum
-            LoggingLevel minLevel = config.Logging.Level?.ToLowerInvariant() switch
+            LoggingLevel minLevel = config.ElaraLogging.Level?.ToLowerInvariant() switch
             {
                 "debug" => LoggingLevel.Debug,
                 "info" => LoggingLevel.Info,
@@ -119,7 +119,7 @@ namespace Elara.Host
                 .ConfigureLogging(logging =>
                 {
                     logging.ClearProviders();
-                    logging.AddSimpleConsole(o => o.TimestampFormat = config.Logging.ConsoleTimestampFormat);
+                    logging.AddSimpleConsole(o => o.TimestampFormat = config.ElaraLogging.ConsoleTimestampFormat);
                 })
                 .ConfigureServices(services =>
                 {
@@ -136,16 +136,29 @@ namespace Elara.Host
                         svc.OutputFilters = new List<string>(config.LanguageModel.OutputFilters ?? Array.Empty<string>());
                         return svc;
                     });
-                    // Text-to-speech (System.Speech)
+                    // Text-to-speech: use Windows System.Speech where available, otherwise NoOp
                     services.AddSingleton<ITextToSpeechService>(_ =>
                     {
-                        var ttsSvc = new TextToSpeechService();
-                        ttsSvc.InitializeOnce(
-                            config.TextToSpeech.Voice,
-                            config.TextToSpeech.Rate,
-                            config.TextToSpeech.Pitch,
-                            config.TextToSpeech.PreambleMs);
-                        return ttsSvc;
+                        if (OperatingSystem.IsWindows())
+                        {
+                            var ttsSvc = new TextToSpeechService();
+                            ttsSvc.InitializeOnce(
+                                config.TextToSpeech.Voice,
+                                config.TextToSpeech.Rate,
+                                config.TextToSpeech.Pitch,
+                                config.TextToSpeech.PreambleMs);
+                            return ttsSvc;
+                        }
+                        else
+                        {
+                            var ttsSvc = new NoOpTextToSpeechService();
+                            ttsSvc.InitializeOnce(
+                                config.TextToSpeech.Voice,
+                                config.TextToSpeech.Rate,
+                                config.TextToSpeech.Pitch,
+                                config.TextToSpeech.PreambleMs);
+                            return ttsSvc;
+                        }
                     });
                 })
                 .Build();

@@ -4,7 +4,6 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using Elara.Host.Core.Interfaces;
 using Elara.Host.Logging;
-using Elara.Host.Logging;
 using NAudio.Wave;
 
 namespace Elara.Host.Pipeline;
@@ -20,7 +19,6 @@ public sealed class Transcriber
     private readonly ChannelReader<AudioChunk> _reader;
     private readonly ChannelWriter<TranscriptionItem>? _outWriter;
     private readonly ILog _log;
-    private bool _inSilenceRun;
 
     // Heuristics for classifying a transcription as meaningful.
     private const int MinWords = 1; // relaxed heuristic for sensitivity
@@ -84,12 +82,10 @@ public sealed class Transcriber
                     if (meaningful)
                     {
                         _log.Info($"#{chunk.Sequence} ({chunk.DurationMs}ms,{label}): {text}");
-                        _inSilenceRun = false;
                     }
                     else
                     {
                         // no console output for silence in service; optionally could emit Debug
-                        _inSilenceRun = true;
                     }
 
                     // Publish to downstream pipeline
@@ -123,7 +119,6 @@ public sealed class Transcriber
         }
         finally
         {
-            _inSilenceRun = false;
         }
     }
 

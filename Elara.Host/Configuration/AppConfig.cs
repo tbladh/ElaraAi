@@ -16,7 +16,7 @@ public sealed class AppConfig
     /// <summary>
     /// Logging settings (directories, file name pattern, levels).
     /// </summary>
-    public required LoggingConfig Logging { get; init; }
+    public required LoggingConfig ElaraLogging { get; init; }
 
     /// <summary>
     /// Audio segmentation (VAD) parameters controlling when speech starts/ends.

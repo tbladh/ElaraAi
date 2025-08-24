@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using Elara.Host.Core.Interfaces;
 using NAudio.Utils;
 using NAudio.Wave;
@@ -164,7 +165,7 @@ namespace Elara.Host.Audio
         /// Provides a live raw byte stream from the microphone as an async enumerable.
         /// Each yielded buffer contains a copy of the input device buffer. Honors cancellation.
         /// </summary>
-        public async IAsyncEnumerable<byte[]> GetAudioStreamAsync(CancellationToken cancellationToken)
+        public async IAsyncEnumerable<byte[]> GetAudioStreamAsync([EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var waveIn = new WaveInEvent
             {

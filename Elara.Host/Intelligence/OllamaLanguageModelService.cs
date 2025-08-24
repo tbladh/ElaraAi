@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Collections.Generic;
 using Elara.Host.Core.Interfaces;
 using Elara.Host.Logging;
 using Elara.Host.Extensions;
@@ -21,12 +22,12 @@ namespace Elara.Host.Intelligence
         /// <summary>
         /// Gets or sets the currently selected model
         /// </summary>
-        public string CurrentModel { get; set; }
+        public string CurrentModel { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the system prompt to use with the model
         /// </summary>
-        public string SystemPrompt { get; set; }
+        public string SystemPrompt { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets the name of the language model service provider
@@ -97,7 +98,7 @@ namespace Elara.Host.Intelligence
         /// <param name="cancellationToken">Cancellation token passed to HTTP calls.</param>
         /// <returns>Response text with <see cref="OutputFilters"/> applied.</returns>
         /// <exception cref="InvalidOperationException">If called with stream=true.</exception>
-        private async Task<string> SendGenerateAsync(string prompt, string system, bool stream, CancellationToken cancellationToken)
+        private async Task<string> SendGenerateAsync(string prompt, string? system, bool stream, CancellationToken cancellationToken)
         {
             await EnsureModelSelectedAsync();
 
@@ -180,7 +181,8 @@ namespace Elara.Host.Intelligence
                 var modelNames = new List<string>();
                 foreach (var model in response.Models)
                 {
-                    modelNames.Add(model.Name);
+                    if (!string.IsNullOrEmpty(model.Name))
+                        modelNames.Add(model.Name);
                 }
 
                 return modelNames;
@@ -213,13 +215,13 @@ namespace Elara.Host.Intelligence
         private class OllamaGenerateRequest
         {
             [JsonPropertyName("model")]
-            public string Model { get; set; }
+            public string Model { get; set; } = string.Empty;
 
             [JsonPropertyName("prompt")]
-            public string Prompt { get; set; }
+            public string Prompt { get; set; } = string.Empty;
 
             [JsonPropertyName("system")]
-            public string System { get; set; }
+            public string? System { get; set; }
 
             [JsonPropertyName("stream")]
             public bool Stream { get; set; }
@@ -228,19 +230,19 @@ namespace Elara.Host.Intelligence
         private class OllamaGenerateResponse
         {
             [JsonPropertyName("response")]
-            public string Response { get; set; }
+            public string? Response { get; set; }
         }
 
         private class OllamaTagsResponse
         {
             [JsonPropertyName("models")]
-            public OllamaModel[] Models { get; set; }
+            public OllamaModel[]? Models { get; set; }
         }
 
         private class OllamaModel
         {
             [JsonPropertyName("name")]
-            public string Name { get; set; }
+            public string? Name { get; set; }
         }
 
         #endregion

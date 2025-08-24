@@ -1,12 +1,14 @@
 using Elara.Host.Core.Interfaces;
 using System.Speech.Synthesis;
 using System.Threading;
+using System.Runtime.Versioning;
 
 namespace Elara.Host.Speech
 {
     /// <summary>
     /// Implementation of ITextToSpeechService using System.Speech for text-to-speech synthesis
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public class TextToSpeechService : ITextToSpeechService
     {
         private readonly SpeechSynthesizer _synthesizer;
@@ -21,7 +23,7 @@ namespace Elara.Host.Speech
         /// <summary>
         /// Gets or sets the currently selected voice
         /// </summary>
-        private string _currentVoice;
+        private string _currentVoice = string.Empty;
         public string CurrentVoice => _currentVoice;
 
         /// <summary>
@@ -63,19 +65,19 @@ namespace Elara.Host.Speech
                 {
                     var first = installed.First().VoiceInfo.Name;
                     _synthesizer.SelectVoice(first);
-                    _currentVoice = _synthesizer.Voice?.Name;
+                    _currentVoice = _synthesizer.Voice?.Name ?? string.Empty;
                 }
                 else
                 {
                     // Fallback to hints, though on some systems this may still be the same as default
                     _synthesizer.SelectVoiceByHints(VoiceGender.NotSet, VoiceAge.NotSet);
-                    _currentVoice = _synthesizer.Voice?.Name;
+                    _currentVoice = _synthesizer.Voice?.Name ?? string.Empty;
                 }
             }
             catch
             {
-                // If no voice is available, we'll handle this gracefully
-                _currentVoice = null;
+                // If no voice is available, keep empty
+                _currentVoice = string.Empty;
             }
         }
 
