@@ -4,7 +4,7 @@ Elara is licenced under a modified version of the PolyForm Small Business Licens
 
 <https://polyformproject.org/licenses/small-business/1.0.0>
 
-Required Notice: Copyright Thomas Bladh. (https://thomasbladh.com)
+Required Notice: Copyright © Thomas Bladh. (https://thomasbladh.com)
 
 ## Acceptance
 
