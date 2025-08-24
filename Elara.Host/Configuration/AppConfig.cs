@@ -212,6 +212,8 @@ public sealed class TextToSpeechConfig
     public float Rate { get; init; } = 1.0f;
     /// <summary>Pitch multiplier (1.0 = normal).</summary>
     public float Pitch { get; init; } = 1.0f;
+    /// <summary>Silent preamble duration in milliseconds to insert before each utterance.</summary>
+    public int PreambleMs { get; init; } = 0;
 }
 
 /// <summary>

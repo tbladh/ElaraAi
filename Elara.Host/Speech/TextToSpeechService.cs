@@ -11,6 +11,7 @@ namespace Elara.Host.Speech
     {
         private readonly SpeechSynthesizer _synthesizer;
         private bool _sealed;
+        private int _preambleMs;
 
         /// <summary>
         /// Gets the name of the text-to-speech service provider
@@ -40,6 +41,11 @@ namespace Elara.Host.Speech
         /// </summary>
         private float _speechVolume = 100.0f;
         public float SpeechVolume => _speechVolume;
+
+        /// <summary>
+        /// Duration in ms of a silent preamble inserted before each utterance.
+        /// </summary>
+        public int PreambleMs => _preambleMs;
 
         /// <summary>
         /// Creates a new instance of the TextToSpeechService
@@ -77,7 +83,7 @@ namespace Elara.Host.Speech
         /// Initialize this service exactly once and seal parameters for the process lifetime.
         /// Subsequent calls are no-ops.
         /// </summary>
-        public void InitializeOnce(string? voice, float? rate, float? pitch)
+        public void InitializeOnce(string? voice, float? rate, float? pitch, int? preambleMs = null)
         {
             if (_sealed) return;
             if (!string.IsNullOrWhiteSpace(voice))
@@ -86,8 +92,9 @@ namespace Elara.Host.Speech
             }
             if (rate.HasValue) _speechRate = rate.Value;
             if (pitch.HasValue) _speechPitch = pitch.Value;
+            if (preambleMs.HasValue) _preambleMs = Math.Max(0, preambleMs.Value);
             _sealed = true;
-            Console.WriteLine($"[TTS] Initialized (voice='{_currentVoice ?? "<none>"}', rate={_speechRate:F2}, pitch={_speechPitch:F2})");
+            Console.WriteLine($"[TTS] Initialized (voice='{_currentVoice ?? "<none>"}', rate={_speechRate:F2}, pitch={_speechPitch:F2}, preambleMs={_preambleMs})");
         }
 
         /// <summary>
@@ -99,9 +106,10 @@ namespace Elara.Host.Speech
             {
                 var stream = new MemoryStream();
                 _synthesizer.SetOutputToWaveStream(stream);
-                
+
                 ApplyVoiceSettings();
-                _synthesizer.Speak(text);
+                var builder = BuildPrompt(text);
+                _synthesizer.Speak(builder);
                 
                 stream.Position = 0;
                 return (Stream)stream;
@@ -116,9 +124,10 @@ namespace Elara.Host.Speech
             return Task.Run(() =>
             {
                 _synthesizer.SetOutputToWaveFile(outputFilePath);
-                
+
                 ApplyVoiceSettings();
-                _synthesizer.Speak(text);
+                var builder = BuildPrompt(text);
+                _synthesizer.Speak(builder);
                 
                 _synthesizer.SetOutputToNull();
             });
@@ -132,9 +141,10 @@ namespace Elara.Host.Speech
             return Task.Run(() =>
             {
                 _synthesizer.SetOutputToDefaultAudioDevice();
-                
+
                 ApplyVoiceSettings();
-                _synthesizer.Speak(text);
+                var builder = BuildPrompt(text);
+                _synthesizer.Speak(builder);
             });
         }
 
@@ -173,7 +183,8 @@ namespace Elara.Host.Speech
                 _synthesizer.SetOutputToDefaultAudioDevice();
                 ApplyVoiceSettings();
                 _synthesizer.SpeakCompleted += OnCompleted;
-                _synthesizer.SpeakAsync(text);
+                var builder = BuildPrompt(text);
+                _synthesizer.SpeakAsync(builder);
             }
             catch (Exception ex)
             {
@@ -250,6 +261,17 @@ namespace Elara.Host.Speech
             
             // Set volume (0 to 100)
             _synthesizer.Volume = (int)Math.Clamp(_speechVolume, 0, 100);
+        }
+
+        private PromptBuilder BuildPrompt(string text)
+        {
+            var pb = new PromptBuilder();
+            if (_preambleMs > 0)
+            {
+                pb.AppendBreak(TimeSpan.FromMilliseconds(_preambleMs));
+            }
+            pb.AppendText(text ?? string.Empty);
+            return pb;
         }
     }
 }

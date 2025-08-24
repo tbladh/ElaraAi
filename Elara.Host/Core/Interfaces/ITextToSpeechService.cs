@@ -48,7 +48,7 @@ namespace Elara.Host.Core.Interfaces
         /// <param name="voice">Preferred voice name (nullable)</param>
         /// <param name="rate">Preferred rate multiplier (1.0 = normal)</param>
         /// <param name="pitch">Preferred pitch multiplier (1.0 = normal)</param>
-        void InitializeOnce(string? voice, float? rate, float? pitch);
+        void InitializeOnce(string? voice, float? rate, float? pitch, int? preambleMs = null);
 
         /// <summary>
         /// Gets the currently selected voice
@@ -64,6 +64,11 @@ namespace Elara.Host.Core.Interfaces
         /// Gets the speech pitch
         /// </summary>
         float SpeechPitch { get; }
+        
+        /// <summary>
+        /// Gets the configured silent preamble duration in milliseconds applied before each utterance.
+        /// </summary>
+        int PreambleMs { get; }
         
         /// <summary>
         /// Gets the name of the text-to-speech service provider

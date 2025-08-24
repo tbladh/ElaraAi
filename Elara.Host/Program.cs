@@ -140,7 +140,11 @@ namespace Elara.Host
                     services.AddSingleton<ITextToSpeechService>(_ =>
                     {
                         var ttsSvc = new TextToSpeechService();
-                        ttsSvc.InitializeOnce(config.TextToSpeech.Voice, config.TextToSpeech.Rate, config.TextToSpeech.Pitch);
+                        ttsSvc.InitializeOnce(
+                            config.TextToSpeech.Voice,
+                            config.TextToSpeech.Rate,
+                            config.TextToSpeech.Pitch,
+                            config.TextToSpeech.PreambleMs);
                         return ttsSvc;
                     });
                 })
