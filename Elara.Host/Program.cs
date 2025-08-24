@@ -189,6 +189,7 @@ namespace Elara.Host
             var llm = host.Services.GetRequiredService<ILanguageModelService>();
             var tts = host.Services.GetRequiredService<ITextToSpeechService>();
             var ttsEnabled = config.TextToSpeech.Enabled;
+            var announcerPlayer = new AnnouncementPlayer(tts);
 
             // Suppression window to ignore transcriptions captured while the AI is Processing/Speaking
             // This prevents feedback where speaker output is picked up by the mic and later processed.
@@ -205,15 +206,15 @@ namespace Elara.Host
                     if (!ttsEnabled) return;
                     if (from == ConversationMode.Quiescent && to == ConversationMode.Listening)
                     {
-                        await tts.SpeakToDefaultOutputAsync(announcer.AcknowledgeWakeWord);
+                        await announcerPlayer.PlayAsync("Wake", announcer.AcknowledgeWakeWord);
                     }
                     else if (from == ConversationMode.Listening && to == ConversationMode.Processing)
                     {
-                        await tts.SpeakToDefaultOutputAsync(announcer.AcknowledgePrompt);
+                        await announcerPlayer.PlayAsync("Prompt", announcer.AcknowledgePrompt);
                     }
                     else if (from == ConversationMode.Listening && to == ConversationMode.Quiescent)
                     {
-                        await tts.SpeakToDefaultOutputAsync(announcer.AcknowledgeQuiescence);
+                        await announcerPlayer.PlayAsync("Quiescence", announcer.AcknowledgeQuiescence);
                     }
                 }
                 catch { /* best-effort announcement */ }
@@ -279,16 +280,12 @@ namespace Elara.Host
             // Startup deterministic announcement to pre-warm TTS and announce key settings
             if (ttsEnabled)
             {
-                try
-                {
-                    var startup = announcer.RenderStartup(
-                        config.Host.WakeWord,
-                        (llm as OllamaLanguageModelService)?.CurrentModel ?? "<model>",
-                        config.LanguageModel.BaseUrl,
-                        tts.CurrentVoice);
-                    await tts.SpeakToDefaultOutputAsync(startup);
-                }
-                catch { /* best-effort warmup announcement */ }
+                var startup = announcer.RenderStartup(
+                    config.Host.WakeWord,
+                    (llm as OllamaLanguageModelService)?.CurrentModel ?? "<model>",
+                    config.LanguageModel.BaseUrl,
+                    tts.CurrentVoice);
+                await announcerPlayer.PlayAsync("Startup", startup);
             }
 
             // Optional full-session recording (from app start until quit), controlled by --record
