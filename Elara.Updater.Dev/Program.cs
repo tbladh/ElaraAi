@@ -125,11 +125,30 @@ async Task EnsureRepoAsync()
     {
         throw new InvalidOperationException($"Update failed: {msgUpdate}");
     }
+    // If host is running, kill it to avoid file locks, then build
+    if (ProcessUtils.IsProcessRunning(cfg.Host.ProcessName))
+    {
+        Log("Host is running; attempting to stop it before build...");
+        var killed = await ProcessUtils.KillProcessesByNameAsync(cfg.Host.ProcessName, cfg.Ops.KillTimeoutMs, Log);
+        if (!killed)
+        {
+            throw new InvalidOperationException("Failed to kill running host processes within timeout.");
+        }
+        Log("Host processes stopped.");
+    }
     var (okBuild, buildOut) = await BuildHostAsync();
     if (!okBuild)
     {
         throw new InvalidOperationException($"Build failed: {buildOut}");
     }
+    // Auto start host after successful build
+    var (okStart, pid) = await ProcessUtils.StartProcessInNewWindowAsync(HostExePath(), cfg.Host.Args ?? string.Empty, HostWorkingDir(), Log);
+    if (!okStart)
+    {
+        throw new InvalidOperationException("Failed to start Elara.Host after build.");
+    }
+    await Task.Delay(cfg.Ops.StartWaitMs);
+    Log($"Started PID {pid} after build.");
 }
 
 async Task<object> RedeployAsync()
@@ -165,8 +184,8 @@ async Task<object> RedeployAsync()
             return new { ok = false, message = "Build failed." };
         }
 
-        // Start host
-        var (okStart, pid) = await ProcessUtils.StartProcessAsync(HostExePath(), cfg.Host.Args ?? string.Empty, HostWorkingDir(), Log);
+        // Start host (new console window)
+        var (okStart, pid) = await ProcessUtils.StartProcessInNewWindowAsync(HostExePath(), cfg.Host.Args ?? string.Empty, HostWorkingDir(), Log);
         if (!okStart)
         {
             return new { ok = false, message = "Failed to start Elara.Host." };
@@ -199,7 +218,7 @@ async Task<object> RestartAsync()
             Log(msg);
             return new { ok = false, message = msg };
         }
-        var (okStart, pid) = await ProcessUtils.StartProcessAsync(HostExePath(), cfg.Host.Args ?? string.Empty, HostWorkingDir(), Log);
+        var (okStart, pid) = await ProcessUtils.StartProcessInNewWindowAsync(HostExePath(), cfg.Host.Args ?? string.Empty, HostWorkingDir(), Log);
         if (!okStart)
         {
             return new { ok = false, message = "Failed to start Elara.Host." };
