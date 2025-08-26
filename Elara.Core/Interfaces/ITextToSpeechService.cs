@@ -1,4 +1,4 @@
-namespace Elara.Host.Core.Interfaces
+namespace Elara.Core.Interfaces
 {
     /// <summary>
     /// Interface for text-to-speech services

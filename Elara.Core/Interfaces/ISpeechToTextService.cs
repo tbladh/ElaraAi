@@ -1,9 +1,4 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Elara.Host.Core.Interfaces
+namespace Elara.Core.Interfaces
 {
     /// <summary>
     /// Interface for speech-to-text services

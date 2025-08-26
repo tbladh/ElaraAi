@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Runtime.CompilerServices;
-using Elara.Host.Core.Interfaces;
+using Elara.Core.Interfaces;
 using NAudio.Utils;
 using NAudio.Wave;
 

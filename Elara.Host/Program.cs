@@ -8,7 +8,7 @@ using NAudio.Wave;
 using Elara.Host.Intelligence;
 using LoggingLevel = Elara.Host.Logging.LogLevel;
 using Elara.Host.Configuration;
-using Elara.Host.Core.Interfaces;
+using Elara.Core.Interfaces;
 using Elara.Host.Tools;
 using Elara.Host.Logging;
 using Elara.Host.Pipeline;

@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Elara.Host.Core.Interfaces
+namespace Elara.Core.Interfaces
 {
     /// <summary>
     /// Interface for audio processing components that handle audio input and output streams

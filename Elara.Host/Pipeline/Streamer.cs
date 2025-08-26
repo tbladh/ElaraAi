@@ -5,7 +5,7 @@ using NAudio.Utils;
 using NAudio.Wave;
 using Elara.Host.Logging;
 using Elara.Host.Configuration;
-using Elara.Host.Core.Interfaces;
+using Elara.Core.Interfaces;
 
 namespace Elara.Host.Pipeline;
 

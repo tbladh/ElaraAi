@@ -1,9 +1,4 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using System.IO;
-using System.Collections.Generic;
-using Elara.Host.Core.Interfaces;
+using Elara.Core.Interfaces;
 
 namespace Elara.Host.Speech
 {

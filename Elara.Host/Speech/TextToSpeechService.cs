@@ -1,4 +1,4 @@
-using Elara.Host.Core.Interfaces;
+using Elara.Core.Interfaces;
 using System.Speech.Synthesis;
 using System.Threading;
 using System.Runtime.Versioning;

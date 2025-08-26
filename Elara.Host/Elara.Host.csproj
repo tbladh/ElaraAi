@@ -48,6 +48,10 @@
     <Folder Include="Extensions\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Elara.Core\Elara.Core.csproj" />
+  </ItemGroup>
+
   <!-- Internalized minimal dependencies; no project references needed -->
 
 </Project>
