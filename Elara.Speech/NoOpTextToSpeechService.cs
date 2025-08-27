@@ -1,6 +1,6 @@
 using Elara.Core.Interfaces;
 
-namespace Elara.Host.Speech
+namespace Elara.Speech
 {
     /// <summary>
     /// Cross-platform placeholder TTS implementation that performs no audio output.

@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 using Elara.Host.Audio;
-using Elara.Host.Speech;
+using Elara.Speech;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

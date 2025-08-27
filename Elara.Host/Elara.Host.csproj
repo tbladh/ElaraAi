@@ -50,6 +50,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Elara.Core\Elara.Core.csproj" />
+    <ProjectReference Include="..\Elara.Speech\Elara.Speech.csproj" />
   </ItemGroup>
 
   <!-- Internalized minimal dependencies; no project references needed -->

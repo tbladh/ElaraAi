@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using Whisper.net;
 using Elara.Core.Interfaces;
 
-namespace Elara.Host.Speech
+namespace Elara.Speech
 {
     /// <summary>
     /// Minimal Whisper.net–backed speech-to-text (STT) implementation used by the sandbox host.

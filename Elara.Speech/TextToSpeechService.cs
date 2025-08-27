@@ -1,9 +1,8 @@
 using Elara.Core.Interfaces;
 using System.Speech.Synthesis;
-using System.Threading;
 using System.Runtime.Versioning;
 
-namespace Elara.Host.Speech
+namespace Elara.Speech
 {
     /// <summary>
     /// Implementation of ITextToSpeechService using System.Speech for text-to-speech synthesis

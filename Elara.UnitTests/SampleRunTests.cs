@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Elara.Host.Speech;
+using Elara.Speech;
 using Elara.Host.Tools;
 
 namespace Elara.UnitTests
