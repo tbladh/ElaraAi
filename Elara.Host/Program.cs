@@ -6,11 +6,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using Elara.Host.Intelligence;
-using LoggingLevel = Elara.Host.Logging.LogLevel;
+using LoggingLevel = Elara.Logging.LogLevel;
 using Elara.Host.Configuration;
 using Elara.Core.Interfaces;
 using Elara.Host.Tools;
-using Elara.Host.Logging;
+using Elara.Logging;
 using Elara.Host.Pipeline;
 using Elara.Host.Utilities;
 

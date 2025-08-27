@@ -1,6 +1,6 @@
 using System;
 
-namespace Elara.Host.Logging
+namespace Elara.Logging
 {
     /// <summary>
     /// Applies console colors based on source and level. No file/IO. Purely cosmetic.

@@ -1,4 +1,4 @@
-namespace Elara.Host.Logging
+namespace Elara.Logging
 {
     public interface ILog
     {

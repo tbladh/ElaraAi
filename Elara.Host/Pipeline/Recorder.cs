@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 using Elara.Core.Interfaces;
-using Elara.Host.Logging;
+using Elara.Logging;
 
 namespace Elara.Host.Pipeline;
 

@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.IO;
 using System.Collections.Generic;
 using Elara.Host.Configuration;
-using Elara.Host.Logging;
+using Elara.Logging;
 using Elara.Host.Pipeline;
 using NAudio.Wave;
 

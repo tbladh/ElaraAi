@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Elara.Host.Logging;
+using Elara.Logging;
 
 namespace Elara.Host.Pipeline;
 /// <summary>

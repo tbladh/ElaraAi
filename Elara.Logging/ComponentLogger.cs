@@ -1,6 +1,6 @@
 using System;
 
-namespace Elara.Host.Logging
+namespace Elara.Logging
 {
     /// <summary>
     /// Instance logger injected into components. Delegates to global Logger with a fixed source.

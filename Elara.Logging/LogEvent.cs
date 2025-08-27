@@ -1,6 +1,6 @@
 using System;
 
-namespace Elara.Host.Logging
+namespace Elara.Logging
 {
     public readonly struct LogEvent
     {

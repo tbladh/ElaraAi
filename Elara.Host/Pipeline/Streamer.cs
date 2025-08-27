@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Threading.Channels;
 using NAudio.Utils;
 using NAudio.Wave;
-using Elara.Host.Logging;
+using Elara.Logging;
 using Elara.Host.Configuration;
 using Elara.Core.Interfaces;
 

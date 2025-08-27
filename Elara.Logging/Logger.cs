@@ -1,9 +1,4 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace Elara.Host.Logging
+namespace Elara.Logging
 {
     /// <summary>
     /// Minimal logger: writes to file and raises an event for console subscribers.
