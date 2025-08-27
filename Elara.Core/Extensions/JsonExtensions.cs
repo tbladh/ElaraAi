@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Elara.Host.Extensions
+namespace Elara.Core.Extensions
 {
     /// <summary>
     /// JSON-related extensions.

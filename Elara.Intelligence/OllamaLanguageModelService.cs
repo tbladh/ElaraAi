@@ -2,8 +2,8 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Elara.Core.Interfaces;
+using Elara.Core.Extensions;
 using Elara.Logging;
-using Elara.Host.Extensions;
 
 namespace Elara.Host.Intelligence
 {
