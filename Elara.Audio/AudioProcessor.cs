@@ -3,7 +3,7 @@ using Elara.Core.Interfaces;
 using NAudio.Utils;
 using NAudio.Wave;
 
-namespace Elara.Host.Audio
+namespace Elara.Audio
 {
     /// <summary>
     /// Minimal <see cref="IAudioProcessor"/> using NAudio for recording and playback in the sandbox.
