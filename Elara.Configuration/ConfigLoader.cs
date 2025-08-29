@@ -1,9 +1,6 @@
-using System;
-using System.IO;
 using System.Text.Json;
-using System.Threading.Tasks;
 
-namespace Elara.Host.Configuration
+namespace Elara.Configuration
 {
     /// <summary>
     /// Loads <see cref="AppConfig"/> from JSON (appsettings.json by default) with tolerant JSON options.

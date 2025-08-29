@@ -45,15 +45,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Audio\" />
-    <Folder Include="Extensions\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Elara.Audio\Elara.Audio.csproj" />
+    <ProjectReference Include="..\Elara.Configuration\Elara.Configuration.csproj" />
     <ProjectReference Include="..\Elara.Core\Elara.Core.csproj" />
     <ProjectReference Include="..\Elara.Intelligence\Elara.Intelligence.csproj" />
     <ProjectReference Include="..\Elara.Logging\Elara.Logging.csproj" />
+    <ProjectReference Include="..\Elara.Pipeline\Elara.Pipeline.csproj" />
     <ProjectReference Include="..\Elara.Speech\Elara.Speech.csproj" />
   </ItemGroup>
 

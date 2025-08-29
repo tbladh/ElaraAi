@@ -7,12 +7,13 @@ using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using Elara.Host.Intelligence;
 using LoggingLevel = Elara.Logging.LogLevel;
-using Elara.Host.Configuration;
+using Elara.Configuration;
 using Elara.Core.Interfaces;
 using Elara.Host.Tools;
 using Elara.Logging;
-using Elara.Host.Pipeline;
+using Elara.Pipeline;
 using Elara.Host.Utilities;
+using Elara.Core;
 
 namespace Elara.Host
 {

@@ -1,6 +1,4 @@
-using Elara.Host.Utilities;
-
-namespace Elara.Host.Configuration;
+namespace Elara.Configuration;
 
 /// <summary>
 /// Root application configuration bound from appsettings.json.
@@ -40,60 +38,6 @@ public sealed class AppConfig
     /// </summary>
     public AnnouncementsOptions Announcements { get; init; } = new();
 
-    /*public static AppConfig Default => new AppConfig
-    {
-        Segmenter = new SegmenterConfig
-        {
-            SampleRate = 16000,
-            Channels = 1,
-            FrameMs = 20,
-            EnterRms = 0.015,         // start speech if above this
-            EnterActiveRatio = 0.10, // or active ratio above this
-            ExitRms = 0.01,          // end speech if below this
-            ExitActiveRatio = 0.05,
-            EnterConsecutive = 2,    // ~40ms
-            ExitConsecutive = 8,     // ~160ms (ensures tail padding)
-            PrependPaddingMs = 300,
-            AppendPaddingMs = 400,
-            MinSegmentMs = 500,
-            MaxSegmentMs = 12000,
-            ActiveSampleAbsThreshold = 0.02, // per-sample absolute threshold for active ratio calc
-            BurstEnterRms = 0.06,    // immediate enter when exceeded (short words)
-            BurstWindowMs = 500,
-            BurstMinSegmentMs = 300, // allow very short segments when started via burst
-            BurstQuietConsecutive = 4,
-            // Adaptive thresholds
-            UseAdaptiveThresholds = true,
-            NoiseFloorAlpha = 0.02,
-            NoiseFloorEnterMultiplier = 3.0,
-            NoiseFloorExitMultiplier = 1.5,
-            // Peak-based burst (handles plosives/very short spikes)
-            BurstPeakAbsThreshold = 0.20,
-            EnableMetrics = true,
-            MetricsIntervalMs = 1000
-        },
-        Stt = new SttConfig
-        {
-            Language = "en",
-            ModelFile = "ggml-medium.en.bin",
-            ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin"
-        },
-        LanguageModel = new LanguageModelConfig
-        {
-            Provider = "ollama",
-            BaseUrl = "http://localhost:11434",
-            ModelName = "llama3.1:8b",
-            SystemPrompt = "You are Ernest, a concise and helpful AI assistant.",
-            OutputFilters = Array.Empty<string>()
-        },
-        TextToSpeech = new TextToSpeechConfig
-        {
-            Enabled = true,
-            Voice = null,
-            Rate = 1.0f,
-            Pitch = 1.0f
-        }
-    };*/
 }
 
 /// <summary>

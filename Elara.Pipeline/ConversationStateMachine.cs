@@ -1,8 +1,7 @@
-using System;
-using System.Collections.Generic;
 using Elara.Logging;
+using Elara.Core;
 
-namespace Elara.Host.Pipeline;
+namespace Elara.Pipeline;
 /// <summary>
 /// Coordinates the conversation flow between Quiescent, Listening, Processing, and Speaking.
 /// Keeps responsibilities limited to state transitions and emitting a prompt when entering Processing.

@@ -1,4 +1,4 @@
-namespace Elara.Host.Pipeline;
+namespace Elara.Pipeline;
 
 /// <summary>
 /// Conversation modes for the state machine.

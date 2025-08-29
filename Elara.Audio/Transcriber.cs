@@ -2,8 +2,9 @@ using System.Threading.Channels;
 using Elara.Core.Interfaces;
 using Elara.Logging;
 using NAudio.Wave;
+using Elara.Core;
 
-namespace Elara.Host.Pipeline;
+namespace Elara.Audio;
 
 /// <summary>
 /// Transcribes audio chunks from an input channel into text using an <see cref="ISpeechToTextService"/>.

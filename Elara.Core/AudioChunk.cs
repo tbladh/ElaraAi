@@ -1,7 +1,4 @@
-using System;
-using System.IO;
-
-namespace Elara.Host.Pipeline;
+namespace Elara.Core;
 
 /// <summary>
 /// Represents a single WAV-formatted audio segment emitted by the segmenter/streamer.

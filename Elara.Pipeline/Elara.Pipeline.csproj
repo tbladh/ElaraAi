@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Elara.Core\Elara.Core.csproj" />
+    <ProjectReference Include="..\Elara.Logging\Elara.Logging.csproj" />
+  </ItemGroup>
+
 </Project>

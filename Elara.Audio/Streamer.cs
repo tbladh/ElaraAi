@@ -4,11 +4,13 @@ using System.Threading.Channels;
 using NAudio.Utils;
 using NAudio.Wave;
 using Elara.Logging;
-using Elara.Host.Configuration;
+using Elara.Configuration;
 using Elara.Core.Interfaces;
+using Elara.Core;
 
-namespace Elara.Host.Pipeline;
+namespace Elara.Audio;
 
+// TODO: Should this move to Audio.
 /// <summary>
 /// Continuous audio streamer with simple VAD-based segmentation.
 /// Emits AudioChunk items at speech boundaries with pre/post padding.

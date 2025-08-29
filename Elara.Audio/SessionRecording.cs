@@ -1,12 +1,10 @@
 using System.Text.Json;
-using System.IO;
-using System.Collections.Generic;
-using Elara.Host.Configuration;
+using Elara.Configuration;
 using Elara.Logging;
-using Elara.Host.Pipeline;
 using NAudio.Wave;
+using Elara.Core;
 
-namespace Elara.Host.Utilities;
+namespace Elara.Audio;
 
 /// <summary>
 /// Manages optional full-session recording (audio WAV + expected.json).

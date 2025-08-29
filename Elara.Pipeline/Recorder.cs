@@ -1,8 +1,9 @@
 using System.Threading.Channels;
 using Elara.Core.Interfaces;
 using Elara.Logging;
+using Elara.Core;
 
-namespace Elara.Host.Pipeline;
+namespace Elara.Pipeline;
 
 /// <summary>
 /// Simple time-sliced recorder that produces fixed-duration <see cref="AudioChunk"/> items.

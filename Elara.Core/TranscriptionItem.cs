@@ -1,6 +1,6 @@
 using System;
 
-namespace Elara.Host.Pipeline;
+namespace Elara.Core;
 
 /// <summary>
 /// Represents a single transcription result produced from an <see cref="AudioChunk"/>.

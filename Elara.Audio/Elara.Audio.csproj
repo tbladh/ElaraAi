@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Elara.Configuration\Elara.Configuration.csproj" />
     <ProjectReference Include="..\Elara.Core\Elara.Core.csproj" />
   </ItemGroup>
 
