@@ -8,14 +8,19 @@ Elara is a modular, local-first assistant that listens, transcribes, thinks (LLM
   - .NET 8 SDK
   - Windows for System.Speech TTS (otherwise a No‑Op TTS implementation is used)
 
-- Clone and build
+- Clone
   ```bash
-  dotnet build Elara.sln -v minimal
+  git clone https://github.com/tbladh/ElaraAi.git
+  ```
+
+- Build
+  ```bash
+  dotnet build Elara.sln
   ```
 
 - Run unit tests
   ```bash
-  dotnet test Elara.sln -v minimal
+  dotnet test Elara.sln
   ```
 
 - Run the host app
@@ -64,13 +69,6 @@ Elara is a modular, local-first assistant that listens, transcribes, thinks (LLM
   3. LLM generates a response (`Elara.Intelligence`)
   4. TTS speaks the response (`Elara.Speech`), with an optional silent preamble
   5. `Elara.Pipeline` coordinates the end‑to‑end conversation state
-
-- Dependency graph (simplified)
-  - `Elara.Host` -> `Elara.Core`, `Elara.Audio`, `Elara.Speech`, `Elara.Intelligence`, `Elara.Pipeline`, `FluentHosting`
-  - `Elara.Pipeline` -> `Elara.Core`, `Elara.Audio`, `Elara.Speech`, `Elara.Intelligence`
-  - `Elara.Speech` -> `Elara.Core`
-  - `Elara.Intelligence` -> `Elara.Core`
-  - `Elara.Audio` -> `Elara.Core`
 
 - Configuration binding
   - Strongly‑typed config in `Elara.Core.Configuration` (e.g., `AppConfig`, `TextToSpeechConfig`, `LoggingConfig`)
