@@ -17,6 +17,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Elara.Pipeline\Elara.Pipeline.csproj" />
+    <ProjectReference Include="..\Elara.Core\Elara.Core.csproj" />
+    <ProjectReference Include="..\Elara.Logging\Elara.Logging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
