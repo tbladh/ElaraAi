@@ -105,6 +105,8 @@ Elara is a modular, local-first assistant that listens, transcribes, thinks (LLM
 
 ## Future Direction
 
+- Add basic context management system (last n conversations, etc).
+- Enhance context management system with RAG using local Embedding model via Ollama.
 - Cross‑platform TTS backends (e.g., cloud or local engines) with feature parity
 - Optional multi‑targeting for OS‑specific features
 - Enriched pipeline metrics and diagnostics
