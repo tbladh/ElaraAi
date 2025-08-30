@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using Elara.Core.Interfaces;
 using Elara.Logging;
 using Elara.Core.Time;
@@ -33,7 +34,6 @@ internal sealed class ManualTimeProvider : ITimeProvider
 internal sealed class FakeAudioProcessor : IAudioProcessor
 {
     private readonly byte[] _payload;
-    private bool _recording;
 
     public int StartCalls { get; private set; }
     public int StopCalls { get; private set; }
@@ -45,19 +45,17 @@ internal sealed class FakeAudioProcessor : IAudioProcessor
 
     public Task StartRecordingAsync()
     {
-        _recording = true;
         StartCalls++;
         return Task.CompletedTask;
     }
 
     public Task<Stream> StopRecordingAsync()
     {
-        _recording = false;
         StopCalls++;
         return Task.FromResult<Stream>(new MemoryStream(_payload, writable: false));
     }
 
-    public async IAsyncEnumerable<byte[]> GetAudioStreamAsync(CancellationToken cancellationToken)
+    public async IAsyncEnumerable<byte[]> GetAudioStreamAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // Not used by Recorder tests; yield nothing
         await Task.CompletedTask;

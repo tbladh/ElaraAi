@@ -40,8 +40,8 @@ namespace Elara.Host
                 cts.Cancel();
             };
 
-            // Load configuration early so logging can be configured from settings
-            var config = await ConfigLoader.LoadAsync();
+            // Load configuration using standard pipeline (JSON + env + command line)
+            var config = await ConfigLoader.LoadAsync(args: args);
 
             // Configure logging (file + console subscriber) based on config
             static string ResolveLogPath(string baseDir, string dirSetting)
@@ -125,6 +125,8 @@ namespace Elara.Host
                 })
                 .ConfigureServices(services =>
                 {
+                    // Make strongly-typed config available via DI
+                    services.AddSingleton(config);
                     // Minimal concrete implementations
                     services.AddSingleton<IAudioProcessor>(_ => new AudioProcessor());
                     // Construct STT with provided local model path (no downloading in service)

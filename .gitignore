@@ -470,7 +470,6 @@ model_cache/
 appsettings.local.json
 appsettings.*.json
 !appsettings.json
-!appsettings.Development.json
 
 # User data and preferences
 user_data/

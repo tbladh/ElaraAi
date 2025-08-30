@@ -27,8 +27,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="appsettings.sandbox.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    <None Update="appsettings.Development.json">
+    <DependentUpon>appsettings.json</DependentUpon>  
+	<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
