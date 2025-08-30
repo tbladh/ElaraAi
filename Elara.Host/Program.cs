@@ -141,7 +141,7 @@ namespace Elara.Host
                         var sysPrompt = config.LanguageModel.SystemPrompt ?? string.Empty;
                         if (!string.IsNullOrEmpty(sysPrompt))
                         {
-                            sysPrompt = sysPrompt.Replace("{wake-word}", config.Host.WakeWord ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+                            sysPrompt = sysPrompt.Replace("{WakeWord}", config.Host.WakeWord ?? string.Empty, StringComparison.OrdinalIgnoreCase);
                         }
                         svc.SystemPrompt = sysPrompt;
                         svc.OutputFilters = new List<string>(config.LanguageModel.OutputFilters ?? Array.Empty<string>());
