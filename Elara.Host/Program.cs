@@ -134,7 +134,12 @@ namespace Elara.Host
                     {
                         var svc = new OllamaLanguageModelService(config.LanguageModel.BaseUrl);
                         svc.CurrentModel = config.LanguageModel.ModelName;
-                        svc.SystemPrompt = config.LanguageModel.SystemPrompt;
+                        var sysPrompt = config.LanguageModel.SystemPrompt ?? string.Empty;
+                        if (!string.IsNullOrEmpty(sysPrompt))
+                        {
+                            sysPrompt = sysPrompt.Replace("{wake-word}", config.Host.WakeWord ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+                        }
+                        svc.SystemPrompt = sysPrompt;
                         svc.OutputFilters = new List<string>(config.LanguageModel.OutputFilters ?? Array.Empty<string>());
                         return svc;
                     });
