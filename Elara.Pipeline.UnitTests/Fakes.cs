@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Elara.Core.Interfaces;
 using Elara.Logging;
+using Elara.Core.Time;
 
 namespace Elara.Pipeline.UnitTests;
 
@@ -12,6 +13,21 @@ internal sealed class TestLog : ILog
     public void Warn(string message) => Lines.Enqueue($"WRN: {message}");
     public void Error(string message) => Lines.Enqueue($"ERR: {message}");
     public void Metrics(string message) => Lines.Enqueue($"MET: {message}");
+}
+
+internal sealed class ManualTimeProvider : ITimeProvider
+{
+    public ManualTimeProvider(DateTimeOffset start)
+    {
+        UtcNow = start;
+    }
+
+    public DateTimeOffset UtcNow { get; private set; }
+
+    public void Advance(TimeSpan delta)
+    {
+        UtcNow = UtcNow + delta;
+    }
 }
 
 internal sealed class FakeAudioProcessor : IAudioProcessor

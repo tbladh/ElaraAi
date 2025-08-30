@@ -12,14 +12,16 @@ public class ConversationStateMachineTests
     public void Quiescent_To_Listening_On_WakeWord()
     {
         var log = new TestLog();
+        var t0 = DateTimeOffset.UtcNow;
+        var time = new ManualTimeProvider(t0);
         var fsm = new ConversationStateMachine(
             wakeWord: "elara",
             processingSilence: TimeSpan.FromMilliseconds(200),
             endSilence: TimeSpan.FromMilliseconds(500),
-            log);
+            log,
+            time);
 
-        var now = DateTimeOffset.UtcNow;
-        fsm.HandleTranscription(now, "Hello Elara", meaningful: true);
+        fsm.HandleTranscription(t0, "Hello Elara", meaningful: true);
 
         Assert.Equal(ConversationMode.Listening, fsm.Mode);
         Assert.NotNull(fsm.ListeningSince);
@@ -30,16 +32,18 @@ public class ConversationStateMachineTests
     public void Buffers_And_Emits_Prompt_On_Processing_Silence()
     {
         var log = new TestLog();
+        var t0 = DateTimeOffset.UtcNow;
+        var time = new ManualTimeProvider(t0);
         var fsm = new ConversationStateMachine(
             wakeWord: "hey",
             processingSilence: TimeSpan.FromMilliseconds(50),
             endSilence: TimeSpan.FromMilliseconds(500),
-            log);
+            log,
+            time);
 
         string? prompt = null;
         fsm.PromptReady += p => prompt = p;
 
-        var t0 = DateTimeOffset.UtcNow;
         // Wake
         fsm.HandleTranscription(t0, "hey there", meaningful: true);
         Assert.Equal(ConversationMode.Listening, fsm.Mode);
@@ -63,13 +67,15 @@ public class ConversationStateMachineTests
     public void Listening_To_Quiescent_On_Extended_Silence()
     {
         var log = new TestLog();
+        var t0 = DateTimeOffset.UtcNow;
+        var time = new ManualTimeProvider(t0);
         var fsm = new ConversationStateMachine(
             wakeWord: "elara",
             processingSilence: TimeSpan.FromMilliseconds(50),
             endSilence: TimeSpan.FromMilliseconds(120),
-            log);
+            log,
+            time);
 
-        var t0 = DateTimeOffset.UtcNow;
         fsm.HandleTranscription(t0, "elara", meaningful: true); // wake to listening
         Assert.Equal(ConversationMode.Listening, fsm.Mode);
 
@@ -82,13 +88,14 @@ public class ConversationStateMachineTests
     public void Speaking_Begin_And_End_Transitions()
     {
         var log = new TestLog();
+        var t0 = DateTimeOffset.UtcNow;
+        var time = new ManualTimeProvider(t0);
         var fsm = new ConversationStateMachine(
             wakeWord: "elara",
             processingSilence: TimeSpan.FromMilliseconds(50),
             endSilence: TimeSpan.FromMilliseconds(200),
-            log);
-
-        var t0 = DateTimeOffset.UtcNow;
+            log,
+            time);
         fsm.HandleTranscription(t0, "elara", meaningful: true); // to listening
         Assert.Equal(ConversationMode.Listening, fsm.Mode);
 

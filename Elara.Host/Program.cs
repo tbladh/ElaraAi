@@ -14,6 +14,7 @@ using Elara.Logging;
 using Elara.Pipeline;
 using Elara.Host.Utilities;
 using Elara.Core;
+using Elara.Core.Time;
 
 namespace Elara.Host
 {
@@ -194,7 +195,8 @@ namespace Elara.Host
                 config.Host.WakeWord,
                 TimeSpan.FromSeconds(config.Host.ProcessingSilenceSeconds),
                 TimeSpan.FromSeconds(config.Host.EndSilenceSeconds),
-                new ComponentLogger("Conversation"));
+                new ComponentLogger("Conversation"),
+                new SystemTimeProvider());
 
             // Transcriber consumes audio chunks -> STT -> TranscriptionItem -> transcriptionChannel
             var transcriber = new Transcriber(

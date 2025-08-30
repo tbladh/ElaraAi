@@ -1,5 +1,6 @@
 using Elara.Logging;
 using Elara.Core;
+using Elara.Core.Time;
 
 namespace Elara.Pipeline;
 /// <summary>
@@ -38,7 +39,7 @@ public sealed class ConversationStateMachine
     /// <summary>
     /// UTC timestamp when the current <see cref="Mode"/> was entered. Updated on every transition.
     /// </summary>
-    public DateTimeOffset ModeEnteredAt { get; private set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset ModeEnteredAt { get; private set; }
 
     // Edge-trigger guard: ensure we only consider Processing once per Listening session
     // (until new meaningful speech arrives). Prevents log spam when buffer is empty.
@@ -69,12 +70,16 @@ public sealed class ConversationStateMachine
     /// <summary>
     /// Construct a new <see cref="ConversationStateMachine"/> with wake word and silence parameters.
     /// </summary>
-    public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, ILog log)
+    private readonly ITimeProvider _time;
+
+    public ConversationStateMachine(string wakeWord, TimeSpan processingSilence, TimeSpan endSilence, ILog log, ITimeProvider time)
     {
         WakeWord = wakeWord ?? string.Empty;
         ProcessingSilence = processingSilence;
         EndSilence = endSilence;
         _log = log;
+        _time = time;
+        ModeEnteredAt = _time.UtcNow;
         _log.Info("reporting in");
     }
 
@@ -203,7 +208,7 @@ public sealed class ConversationStateMachine
         ListeningSince = null;
         LastHeardAt = null;
         _buffer.Clear();
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.UtcNow;
         ModeEnteredAt = now;
         try { StateChanged?.Invoke(from, Mode, reason, now); } catch { }
         Log($"-> Quiescent ({reason})");
@@ -217,7 +222,7 @@ public sealed class ConversationStateMachine
         var from = Mode;
         Mode = ConversationMode.Processing;
         Log($"Listening -> Processing ({reason})");
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.UtcNow;
         ModeEnteredAt = now;
         try { StateChanged?.Invoke(from, Mode, reason, now); } catch { }
         if (_buffer.Count > 0)
@@ -241,7 +246,7 @@ public sealed class ConversationStateMachine
                 var from = Mode;
                 Mode = ConversationMode.Speaking;
                 _buffer.Clear();
-                var now = DateTimeOffset.UtcNow;
+                var now = _time.UtcNow;
                 ModeEnteredAt = now;
                 try { StateChanged?.Invoke(from, Mode, "begin speaking", now); } catch { }
                 Log("-> Speaking (audio output in progress)");
@@ -258,7 +263,7 @@ public sealed class ConversationStateMachine
         {
             if (Mode == ConversationMode.Speaking)
             {
-                var now = DateTimeOffset.UtcNow;
+                var now = _time.UtcNow;
                 var from = Mode;
                 TransitionToListening(now, "speech completed");
                 // TransitionToListening already raises StateChanged
@@ -275,7 +280,7 @@ public sealed class ConversationStateMachine
         {
             if (Mode == ConversationMode.Processing)
             {
-                var now = DateTimeOffset.UtcNow;
+                var now = _time.UtcNow;
                 TransitionToListening(now, "processing completed");
                 // TransitionToListening already raises StateChanged
             }
