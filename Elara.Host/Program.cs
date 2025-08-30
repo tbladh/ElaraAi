@@ -88,7 +88,7 @@ namespace Elara.Host
             };
 
             // First message: how to terminate without closing the window
-            Logger.Info("Program", "Press 'Q' to quit or use Ctrl+C to stop.");
+            Logger.Info(HostConstants.Log.Program, HostConstants.ConsoleText.QuitHint);
 
             // Bind announcements from config
             var announcer = Announcements.FromOptions(config.Announcements);
@@ -98,7 +98,7 @@ namespace Elara.Host
             string? recordScenario = null;
             foreach (var a in args ?? Array.Empty<string>())
             {
-                if (a.StartsWith("--record", StringComparison.OrdinalIgnoreCase))
+                if (a.StartsWith(HostConstants.Cli.RecordFlag, StringComparison.OrdinalIgnoreCase))
                 {
                     recordingEnabled = true;
                     var eq = a.IndexOf('=');
@@ -110,13 +110,13 @@ namespace Elara.Host
             // Ensure STT model is present BEFORE DI wiring and processing (use cross-platform cache dir)
             var modelsDirPre = await AppPaths.GetModelCacheDirAsync();
             // Output resolved model cache directory for visibility
-            Logger.Info("STT", $"Model cache directory: {modelsDirPre}");
+            Logger.Info(HostConstants.Log.Stt, $"Model cache directory: {modelsDirPre}");
             var modelPathPre = Path.Combine(modelsDirPre, config.Stt.ModelFile);
             if (!File.Exists(modelPathPre))
             {
-                Logger.Info("STT", $"Downloading Whisper model '{config.Stt.ModelFile}'... URL: {config.Stt.ModelUrl} Path: {modelPathPre}");
+                Logger.Info(HostConstants.Log.Stt, $"Downloading Whisper model '{config.Stt.ModelFile}'... URL: {config.Stt.ModelUrl} Path: {modelPathPre}");
                 await FileDownloader.DownloadToFileAsync(modelPathPre, config.Stt.ModelUrl);
-                Logger.Info("STT", $"Model ready: {modelPathPre}");
+                Logger.Info(HostConstants.Log.Stt, $"Model ready: {modelPathPre}");
             }
 
             var host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder(args)
@@ -141,7 +141,7 @@ namespace Elara.Host
                         var sysPrompt = config.LanguageModel.SystemPrompt ?? string.Empty;
                         if (!string.IsNullOrEmpty(sysPrompt))
                         {
-                            sysPrompt = sysPrompt.Replace("{WakeWord}", config.Host.WakeWord ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+                            sysPrompt = sysPrompt.Replace(HostConstants.Placeholders.WakeWord, config.Host.WakeWord ?? string.Empty, StringComparison.OrdinalIgnoreCase);
                         }
                         svc.SystemPrompt = sysPrompt;
                         svc.OutputFilters = new List<string>(config.LanguageModel.OutputFilters ?? Array.Empty<string>());
@@ -174,7 +174,7 @@ namespace Elara.Host
                 })
                 .Build();
 
-            Logger.Debug("Program", "Host built and services configured.");
+            Logger.Debug(HostConstants.Log.Program, "Host built and services configured.");
 
             // Channel for audio chunks from Streamer -> Transcriber
             var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(config.Host.AudioQueueCapacity)
@@ -197,14 +197,14 @@ namespace Elara.Host
                 host.Services.GetRequiredService<IAudioProcessor>(),
                 audioChannel.Writer,
                 config.Segmenter,
-                new ComponentLogger("Streamer"));
+                new ComponentLogger(HostConstants.Log.Streamer));
 
             // FSM manages conversation transitions; Transcriber feeds it via transcriptionChannel
             var csm = new ConversationStateMachine(
                 config.Host.WakeWord,
                 TimeSpan.FromSeconds(config.Host.ProcessingSilenceSeconds),
                 TimeSpan.FromSeconds(config.Host.EndSilenceSeconds),
-                new ComponentLogger("Conversation"),
+                new ComponentLogger(HostConstants.Log.Conversation),
                 new SystemTimeProvider());
 
             // Transcriber consumes audio chunks -> STT -> TranscriptionItem -> transcriptionChannel
@@ -212,7 +212,7 @@ namespace Elara.Host
                 host.Services.GetRequiredService<ISpeechToTextService>(),
                 audioChannel.Reader,
                 transcriptionChannel.Writer,
-                new ComponentLogger("Transcriber"));
+                new ComponentLogger(HostConstants.Log.Transcriber));
 
             // Wire LLM + optional TTS on prompt ready
             var llm = host.Services.GetRequiredService<ILanguageModelService>();
@@ -270,9 +270,9 @@ namespace Elara.Host
                 {
                     try
                     {
-                        Logger.Info("AI", "Calling language model...");
+                        Logger.Info(HostConstants.Log.Ai, "Calling language model...");
                         var reply = await llm.GetResponseAsync(prompt, cts.Token); // Processing -> model call
-                        Logger.Info("AI", $"Response: {reply}");
+                        Logger.Info(HostConstants.Log.Ai, $"Response: {reply}");
                         if (ttsEnabled)
                         {
                             // Transition: Processing -> Speaking for audio output
@@ -294,7 +294,7 @@ namespace Elara.Host
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error("AI", $"Error handling prompt: {ex.Message}");
+                        Logger.Error(HostConstants.Log.Ai, $"Error handling prompt: {ex.Message}");
                         // Ensure we leave current active phase on error
                         if (csm.IsSpeaking) csm.EndSpeaking();
                         else csm.EndProcessing();
@@ -302,9 +302,9 @@ namespace Elara.Host
                 }, cts.Token);
             };
 
-            Console.WriteLine("Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.");
+            Console.WriteLine(HostConstants.ConsoleText.SandboxIntro);
             Console.WriteLine($"Wake word: '{config.Host.WakeWord}', processing after {config.Host.ProcessingSilenceSeconds}s silence, end after {config.Host.EndSilenceSeconds}s silence.");
-            Logger.Info("Program", $"Configured wake word='{config.Host.WakeWord}', processingSilence={config.Host.ProcessingSilenceSeconds}s, endSilence={config.Host.EndSilenceSeconds}s.");
+            Logger.Info(HostConstants.Log.Program, $"Configured wake word='{config.Host.WakeWord}', processingSilence={config.Host.ProcessingSilenceSeconds}s, endSilence={config.Host.EndSilenceSeconds}s.");
 
             // Startup deterministic announcement to pre-warm TTS and announce key settings
             if (ttsEnabled)
@@ -314,7 +314,7 @@ namespace Elara.Host
                     (llm as OllamaLanguageModelService)?.CurrentModel ?? "<model>",
                     config.LanguageModel.BaseUrl,
                     tts.CurrentVoice);
-                await announcerPlayer.PlayAsync("Startup", startup);
+                await announcerPlayer.PlayAsync(HostConstants.Announcements.Startup, startup);
             }
 
             // Optional full-session recording (from app start until quit), controlled by --record
@@ -324,7 +324,7 @@ namespace Elara.Host
                 var scenario = string.IsNullOrWhiteSpace(recordScenario) ? config.Host.SessionRecording.DefaultScenario : recordScenario!;
                 var fmt = new WaveFormat(config.Segmenter.SampleRate, config.Segmenter.Channels);
                 session = SessionRecording.Start(config.Host.SessionRecording.BaseDirectory, scenario, fmt, streamer, config.Host.SessionRecording.Tolerances);
-                Logger.Info("Recorder", $"Writing full session to: {session.AudioWavPath}");
+                Logger.Info(HostConstants.Log.Recorder, $"Writing full session to: {session.AudioWavPath}");
             }
 
             // Key listener task for graceful termination via single keypress
@@ -398,7 +398,7 @@ namespace Elara.Host
             var recordTask = streamer.RunAsync(cts.Token);
             var transcribeTask = transcriber.RunAsync(cts.Token);
 
-            Logger.Debug("Program", "Tasks started: recorder, transcriber, FSM consumer, ticker, key listener.");
+            Logger.Debug(HostConstants.Log.Program, "Tasks started: recorder, transcriber, FSM consumer, ticker, key listener.");
             await Task.WhenAll(recordTask, transcribeTask, fsmTask, tickerTask, keyTask);
 
             // If session recording was enabled, write expected.json from collected transcriptions and settings
@@ -409,7 +409,7 @@ namespace Elara.Host
             }
 
             // Keep window open after shutdown
-            Logger.Info("Program", "Stopped. Press any key to close...");
+            Logger.Info(HostConstants.Log.Program, "Stopped. Press any key to close...");
             try { Console.ReadKey(true); } catch { }
         }
     }

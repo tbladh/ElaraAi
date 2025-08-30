@@ -29,8 +29,8 @@ namespace Elara.UnitTests
             if (!Directory.Exists(sampleRunsDir)) yield break;
             foreach (var scenario in Directory.EnumerateDirectories(sampleRunsDir))
             {
-                var wav = Path.Combine(scenario, "audio.wav");
-                var json = Path.Combine(scenario, "expected.json");
+                var wav = Path.Combine(scenario, TestConstants.Paths.AudioFileName);
+                var json = Path.Combine(scenario, TestConstants.Paths.ExpectedJsonFileName);
                 if (File.Exists(wav) && File.Exists(json))
                 {
                     yield return new object[] { scenario, wav, json };
@@ -41,7 +41,7 @@ namespace Elara.UnitTests
         private static string GetSampleRunsPaths()
         {
             var testsDir = new DirectoryInfo(AppContext.BaseDirectory);
-            return Path.Combine(testsDir.FullName, "SampleRuns");
+            return Path.Combine(testsDir.FullName, TestConstants.Paths.SampleRunsFolder);
         }
 
         [Fact]
@@ -50,9 +50,9 @@ namespace Elara.UnitTests
             var any = DiscoverRuns().Any();
             Assert.True(any,
                 "No SampleRuns found. Place recordings under either: " +
-                "(1) <repo>/ErnestAi.Sandbox.Chunking/SampleRuns/<scenario>/<timestamp> with audio.wav and expected.json, " +
-                "or (2) <repo>/ErnestAi.Sandbox.Chunking.UnitTests/SampleRuns/... . " +
-                "Alternatively set ERNESTAI_REPO_ROOT to the repository root.");
+                $"(1) <repo>/{TestConstants.Paths.LegacySandboxProjectName}/{TestConstants.Paths.SampleRunsFolder}/<scenario>/<timestamp> with {TestConstants.Paths.AudioFileName} and {TestConstants.Paths.ExpectedJsonFileName}, " +
+                $"or (2) <repo>/{TestConstants.Paths.LegacySandboxProjectName}.UnitTests/{TestConstants.Paths.SampleRunsFolder}/... . " +
+                $"Alternatively set {TestConstants.Env.LegacyRepoRootVar} to the repository root.");
         }
 
         [Theory]
@@ -78,7 +78,7 @@ namespace Elara.UnitTests
                 var dir = new DirectoryInfo(AppContext.BaseDirectory);
                 for (int i = 0; i < 12 && dir != null; i++, dir = dir.Parent)
                 {
-                    if (dir.EnumerateDirectories("ErnestAi.Sandbox.Chunking", SearchOption.TopDirectoryOnly).Any())
+                    if (dir.EnumerateDirectories(TestConstants.Paths.LegacySandboxProjectName, SearchOption.TopDirectoryOnly).Any())
                     {
                         repoRoot = dir;
                         break;
@@ -86,7 +86,7 @@ namespace Elara.UnitTests
                 }
                 if (repoRoot != null)
                 {
-                    var sandboxModelsDir = Path.Combine(repoRoot.FullName, "ErnestAi.Sandbox.Chunking", "Models", "Whisper");
+                    var sandboxModelsDir = Path.Combine(repoRoot.FullName, TestConstants.Paths.LegacySandboxProjectName, TestConstants.Paths.ModelsFolderName, TestConstants.Paths.WhisperFolderName);
                     var srcModelPath = Path.Combine(sandboxModelsDir, modelFile);
                     if (File.Exists(srcModelPath))
                     {
