@@ -28,6 +28,14 @@ Elara is a modular, local-first assistant that listens, transcribes, thinks (LLM
   dotnet run --project Elara.Host
   ```
 
+> ⚠️ **Warning (first run download)**
+>
+> On first run, the host will download the configured Whisper STT model (~1.4 GB) and cache it locally. This is a one‑time download per model file.
+> Default cache location:
+> - Windows: `%LOCALAPPDATA%/ElaraAi/Cache/Models/Whisper`
+> - macOS: `~/Library/Caches/ElaraAi/Models/Whisper`
+> - Linux: `$XDG_CACHE_HOME/ElaraAi/Models/Whisper` or `~/.cache/ElaraAi/Models/Whisper`
+
 - Configure the app
   - Edit `Elara.Host/appsettings.json`.
   - Notable sections:

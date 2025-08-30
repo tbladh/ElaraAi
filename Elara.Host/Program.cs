@@ -109,6 +109,8 @@ namespace Elara.Host
 
             // Ensure STT model is present BEFORE DI wiring and processing (use cross-platform cache dir)
             var modelsDirPre = await AppPaths.GetModelCacheDirAsync();
+            // Output resolved model cache directory for visibility
+            Logger.Info("STT", $"Model cache directory: {modelsDirPre}");
             var modelPathPre = Path.Combine(modelsDirPre, config.Stt.ModelFile);
             if (!File.Exists(modelPathPre))
             {

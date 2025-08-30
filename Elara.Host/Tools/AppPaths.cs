@@ -22,22 +22,22 @@ namespace Elara.Host.Tools
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                return Path.Combine(baseDir, "ErnestAi", "Cache");
+                return Path.Combine(baseDir, "ElaraAi", "Cache");
             }
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                // ~/Library/Caches/ErnestAi
+                // ~/Library/Caches/ElaraAi
                 var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 return Path.Combine(home, "Library", "Caches", "ErnestAi");
             }
-            // Linux/Unix: XDG_CACHE_HOME or ~/.cache/ErnestAi
+            // Linux/Unix: XDG_CACHE_HOME or ~/.cache/ElaraAi
             var xdg = Environment.GetEnvironmentVariable("XDG_CACHE_HOME");
             if (!string.IsNullOrWhiteSpace(xdg))
             {
-                return Path.Combine(xdg, "ErnestAi");
+                return Path.Combine(xdg, "ElaraAi");
             }
             var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(userHome, ".cache", "ErnestAi");
+            return Path.Combine(userHome, ".cache", "ElaraAi");
         }
 
         public static async Task<string> GetModelCacheDirAsync()
