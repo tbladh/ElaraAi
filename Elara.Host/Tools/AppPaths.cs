@@ -1,7 +1,7 @@
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using Elara.Core.Paths;
 
 namespace Elara.Host.Tools
 {
@@ -16,44 +16,18 @@ namespace Elara.Host.Tools
             return Task.FromResult(GetCacheRoot());
         }
 
-        public static string GetCacheRoot()
-        {
-            // Prefer OS-standard cache locations
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                return Path.Combine(baseDir, "ElaraAi", "Cache");
-            }
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                // ~/Library/Caches/ElaraAi
-                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                return Path.Combine(home, "Library", "Caches", "ErnestAi");
-            }
-            // Linux/Unix: XDG_CACHE_HOME or ~/.cache/ElaraAi
-            var xdg = Environment.GetEnvironmentVariable("XDG_CACHE_HOME");
-            if (!string.IsNullOrWhiteSpace(xdg))
-            {
-                return Path.Combine(xdg, "ElaraAi");
-            }
-            var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(userHome, ".cache", "ElaraAi");
-        }
+        public static string GetCacheRoot() => ModelPaths.GetCacheRoot();
 
         public static async Task<string> GetModelCacheDirAsync()
         {
-            var root = await GetCacheRootAsync().ConfigureAwait(false);
-            var dir = Path.Combine(root, "Models", "Whisper");
-            Directory.CreateDirectory(dir);
-            return dir;
+            // Preserve async shape; delegate to Core
+            var dir = ModelPaths.GetWhisperModelsDir();
+            return await Task.FromResult(dir).ConfigureAwait(false);
         }
 
         public static string GetModelCacheDir()
         {
-            var root = GetCacheRoot();
-            var dir = Path.Combine(root, "Models", "Whisper");
-            Directory.CreateDirectory(dir);
-            return dir;
+            return ModelPaths.GetWhisperModelsDir();
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -29,7 +29,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Elara.Host\Elara.Host.csproj" />
+    <ProjectReference Include="..\Elara.Core\Elara.Core.csproj" />
+    <ProjectReference Include="..\Elara.Speech\Elara.Speech.csproj" />
   </ItemGroup>
 
   <ItemGroup>

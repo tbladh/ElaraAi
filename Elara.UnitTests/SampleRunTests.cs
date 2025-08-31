@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Elara.Speech;
-using Elara.Host.Tools;
+using Elara.Core.Paths;
 
 namespace Elara.UnitTests
 {
@@ -31,7 +31,29 @@ namespace Elara.UnitTests
             {
                 var wav = Path.Combine(scenario, TestConstants.Paths.AudioFileName);
                 var json = Path.Combine(scenario, TestConstants.Paths.ExpectedJsonFileName);
-                if (File.Exists(wav) && File.Exists(json))
+                if (!File.Exists(wav) || !File.Exists(json))
+                    continue;
+
+                // Only yield scenarios whose required model file already exists in the shared cache
+                bool runnable = false;
+                try
+                {
+                    var expectedJson = File.ReadAllText(json);
+                    var expected = JsonSerializer.Deserialize<ExpectedSchema>(expectedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var modelFile = expected?.settings?.stt?.modelFile ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(modelFile))
+                    {
+                        var modelsDir = ModelPaths.GetWhisperModelsDir();
+                        var modelPath = Path.Combine(modelsDir, modelFile);
+                        runnable = File.Exists(modelPath);
+                    }
+                }
+                catch
+                {
+                    // Ignore malformed scenarios
+                }
+
+                if (runnable)
                 {
                     yield return new object[] { scenario, wav, json };
                 }
@@ -49,10 +71,8 @@ namespace Elara.UnitTests
         {
             var any = DiscoverRuns().Any();
             Assert.True(any,
-                "No SampleRuns found. Place recordings under either: " +
-                $"(1) <repo>/{TestConstants.Paths.LegacySandboxProjectName}/{TestConstants.Paths.SampleRunsFolder}/<scenario>/<timestamp> with {TestConstants.Paths.AudioFileName} and {TestConstants.Paths.ExpectedJsonFileName}, " +
-                $"or (2) <repo>/{TestConstants.Paths.LegacySandboxProjectName}.UnitTests/{TestConstants.Paths.SampleRunsFolder}/... . " +
-                $"Alternatively set {TestConstants.Env.LegacyRepoRootVar} to the repository root.");
+                "No runnable SampleRuns found. Run Elara.Host once to populate the Whisper model cache, then re-run tests. " +
+                "Tests reuse the existing model directory and do not download models.");
         }
 
         [Theory]
@@ -66,48 +86,12 @@ namespace Elara.UnitTests
                 PropertyNameCaseInsensitive = true
             })!;
 
-            // Ensure model is available in cross-platform cache directory
-            var outModelsDir = AppPaths.GetModelCacheDir();
+            // Model path in shared model cache directory (populated by Host)
+            var outModelsDir = ModelPaths.GetWhisperModelsDir();
             var modelFile = expected.settings.stt.modelFile ?? string.Empty;
             var dstModelPath = Path.Combine(outModelsDir, modelFile);
-
-            if (!File.Exists(dstModelPath))
-            {
-                // Try copy from repo sandbox models
-                DirectoryInfo? repoRoot = null;
-                var dir = new DirectoryInfo(AppContext.BaseDirectory);
-                for (int i = 0; i < 12 && dir != null; i++, dir = dir.Parent)
-                {
-                    if (dir.EnumerateDirectories(TestConstants.Paths.LegacySandboxProjectName, SearchOption.TopDirectoryOnly).Any())
-                    {
-                        repoRoot = dir;
-                        break;
-                    }
-                }
-                if (repoRoot != null)
-                {
-                    var sandboxModelsDir = Path.Combine(repoRoot.FullName, TestConstants.Paths.LegacySandboxProjectName, TestConstants.Paths.ModelsFolderName, TestConstants.Paths.WhisperFolderName);
-                    var srcModelPath = Path.Combine(sandboxModelsDir, modelFile);
-                    if (File.Exists(srcModelPath))
-                    {
-                        File.Copy(srcModelPath, dstModelPath, overwrite: false);
-                    }
-                }
-
-                // If still missing, download using the sandbox downloader
-                if (!File.Exists(dstModelPath))
-                {
-                    var url = expected.settings.stt.modelUrl;
-                    if (string.IsNullOrWhiteSpace(url))
-                    {
-                        // Derive a default whisper.cpp URL from modelFile to make the test freestanding
-                        url = $"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{modelFile}";
-                    }
-
-                    // Ensure via shared downloader utility (async-first)
-                    await FileDownloader.EnsureFileAsync(dstModelPath, url);
-                }
-            }
+            // Should exist because discovery filtered scenarios by availability
+            Assert.True(File.Exists(dstModelPath), $"Required model '{modelFile}' not found in '{outModelsDir}'. Run Elara.Host once to populate the model cache.");
 
             // Compose expected text as concatenation of meaningful items
             var expectedText = string.Join(" ", expected.transcripts
