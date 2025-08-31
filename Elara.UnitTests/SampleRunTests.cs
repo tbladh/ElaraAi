@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net.Http;
 using Elara.Speech;
 using Elara.Core.Paths;
 
@@ -11,6 +12,45 @@ namespace Elara.UnitTests
             public Tolerances tolerances { get; set; } = new();
             public Settings settings { get; set; } = new();
             public List<TranscriptItem> transcripts { get; set; } = new();
+        }
+
+        private static async Task EnsureFileAsync(string destinationPath, string url)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            if (File.Exists(destinationPath)) return;
+
+            var tmp = destinationPath + ".tmp";
+            if (File.Exists(tmp))
+            {
+                try { File.Delete(tmp); } catch { /* ignore */ }
+            }
+
+            using var http = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(30)
+            };
+
+            try
+            {
+                await using (var respStream = await http.GetStreamAsync(url))
+                await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await respStream.CopyToAsync(fs);
+                }
+
+                if (File.Exists(destinationPath))
+                {
+                    // Another parallel test may have completed download first
+                    try { File.Delete(tmp); } catch { /* ignore */ }
+                    return;
+                }
+                File.Move(tmp, destinationPath, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* ignore */ }
+                throw new InvalidOperationException($"Failed to download model from '{url}' to '{destinationPath}'.", ex);
+            }
         }
         private sealed class Tolerances { public double cer { get; set; } = 0.25; public double wer { get; set; } = 0.4; }
         private sealed class Settings
@@ -31,29 +71,7 @@ namespace Elara.UnitTests
             {
                 var wav = Path.Combine(scenario, TestConstants.Paths.AudioFileName);
                 var json = Path.Combine(scenario, TestConstants.Paths.ExpectedJsonFileName);
-                if (!File.Exists(wav) || !File.Exists(json))
-                    continue;
-
-                // Only yield scenarios whose required model file already exists in the shared cache
-                bool runnable = false;
-                try
-                {
-                    var expectedJson = File.ReadAllText(json);
-                    var expected = JsonSerializer.Deserialize<ExpectedSchema>(expectedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    var modelFile = expected?.settings?.stt?.modelFile ?? string.Empty;
-                    if (!string.IsNullOrWhiteSpace(modelFile))
-                    {
-                        var modelsDir = ModelPaths.GetWhisperModelsDir();
-                        var modelPath = Path.Combine(modelsDir, modelFile);
-                        runnable = File.Exists(modelPath);
-                    }
-                }
-                catch
-                {
-                    // Ignore malformed scenarios
-                }
-
-                if (runnable)
+                if (File.Exists(wav) && File.Exists(json))
                 {
                     yield return new object[] { scenario, wav, json };
                 }
@@ -71,8 +89,7 @@ namespace Elara.UnitTests
         {
             var any = DiscoverRuns().Any();
             Assert.True(any,
-                "No runnable SampleRuns found. Run Elara.Host once to populate the Whisper model cache, then re-run tests. " +
-                "Tests reuse the existing model directory and do not download models.");
+                "No SampleRuns found. Place recordings under the test project's SampleRuns/<scenario>/ with audio.wav and expected.json.");
         }
 
         [Theory]
@@ -86,12 +103,20 @@ namespace Elara.UnitTests
                 PropertyNameCaseInsensitive = true
             })!;
 
-            // Model path in shared model cache directory (populated by Host)
+            // Model path in shared model cache directory (shared with Host)
             var outModelsDir = ModelPaths.GetWhisperModelsDir();
             var modelFile = expected.settings.stt.modelFile ?? string.Empty;
             var dstModelPath = Path.Combine(outModelsDir, modelFile);
-            // Should exist because discovery filtered scenarios by availability
-            Assert.True(File.Exists(dstModelPath), $"Required model '{modelFile}' not found in '{outModelsDir}'. Run Elara.Host once to populate the model cache.");
+            if (!File.Exists(dstModelPath))
+            {
+                // Determine URL (prefer explicit, fallback to whisper.cpp main)
+                var url = expected.settings.stt.modelUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    url = $"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{modelFile}";
+                }
+                await EnsureFileAsync(dstModelPath, url);
+            }
 
             // Compose expected text as concatenation of meaningful items
             var expectedText = string.Join(" ", expected.transcripts
