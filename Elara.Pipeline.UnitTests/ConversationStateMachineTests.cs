@@ -25,7 +25,33 @@ public class ConversationStateMachineTests
 
         Assert.Equal(ConversationMode.Listening, fsm.Mode);
         Assert.NotNull(fsm.ListeningSince);
-        Assert.Null(fsm.LastHeardAt); // last meaningful set only when already listening
+        Assert.NotNull(fsm.LastHeardAt); // remainder of utterance buffered immediately after wake
+    }
+
+    [Fact]
+    public void Same_Utterance_Wake_And_Question_Is_Preserved_In_Prompt()
+    {
+        var log = new TestLog();
+        var t0 = DateTimeOffset.UtcNow;
+        var time = new ManualTimeProvider(t0);
+        var fsm = new ConversationStateMachine(
+            wakeWord: "margaret",
+            processingSilence: TimeSpan.FromMilliseconds(50),
+            endSilence: TimeSpan.FromMilliseconds(500),
+            log,
+            time);
+
+        string? prompt = null;
+        fsm.PromptReady += p => prompt = p;
+
+        // Single snippet includes wake word and question
+        fsm.HandleTranscription(t0, "Hey Margaret, tell me about Greek cuisine", meaningful: true);
+
+        // Advance time past processing silence to trigger prompt
+        fsm.Tick(t0.AddMilliseconds(80));
+
+        Assert.Equal(ConversationMode.Processing, fsm.Mode);
+        Assert.Equal("Hey Margaret, tell me about Greek cuisine", prompt);
     }
 
     [Fact]
@@ -56,7 +82,7 @@ public class ConversationStateMachineTests
         fsm.Tick(t0.AddMilliseconds(70));
 
         Assert.Equal(ConversationMode.Processing, fsm.Mode);
-        Assert.Equal("how are you?", prompt);
+        Assert.Equal("hey there how are you?", prompt);
 
         // End processing goes back to Listening
         fsm.EndProcessing();

@@ -117,6 +117,14 @@ public sealed class ConversationStateMachine
                     if (hasWake)
                     {
                         TransitionToListening(timestampUtc, reason: $"wake word '{WakeWord}' detected");
+                        // If the same utterance includes content beyond the wake word, capture it immediately
+                        // and preserve the wake word in the buffered text (LLMs handle it and it's polite to include).
+                        if (meaningful && !string.IsNullOrWhiteSpace(text))
+                        {
+                            LastHeardAt = timestampUtc;
+                            _buffer.Add(new TranscriptionItem { TimestampUtc = timestampUtc, Text = text, IsMeaningful = true });
+                            _processingConsidered = false;
+                        }
                     }
                     break;
 
