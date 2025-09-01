@@ -9,6 +9,7 @@ namespace Elara.Host.Utilities
     public sealed class AnnouncementPlayer
     {
         private readonly ITextToSpeechService _tts;
+        private readonly SemaphoreSlim _gate = new(1, 1);
 
         public AnnouncementPlayer(ITextToSpeechService tts)
         {
@@ -23,6 +24,7 @@ namespace Elara.Host.Utilities
         public async Task PlayAsync(string category, string text)
         {
             var source = string.IsNullOrWhiteSpace(category) ? "Announcements" : $"Announcements/{category}";
+            await _gate.WaitAsync();
             try
             {
                 Logger.Info(source, $"Speaking announcement: {Truncate(text, 160)}");
@@ -34,6 +36,10 @@ namespace Elara.Host.Utilities
             catch (Exception ex)
             {
                 Logger.Warn(source, $"Announcement failed: {ex.Message}");
+            }
+            finally
+            {
+                _gate.Release();
             }
         }
 

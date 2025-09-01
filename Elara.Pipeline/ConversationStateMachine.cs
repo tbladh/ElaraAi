@@ -116,13 +116,16 @@ public sealed class ConversationStateMachine
                     // Wake word moves Quiescent -> Listening.
                     if (hasWake)
                     {
-                        TransitionToListening(timestampUtc, reason: $"wake word '{WakeWord}' detected");
+                        // Anchor the listening start to current time to avoid retroactive silence
+                        var now = _time.UtcNow;
+                        TransitionToListening(now, reason: $"wake word '{WakeWord}' detected");
                         // If the same utterance includes content beyond the wake word, capture it immediately
                         // and preserve the wake word in the buffered text (LLMs handle it and it's polite to include).
                         if (meaningful && !string.IsNullOrWhiteSpace(text))
                         {
-                            LastHeardAt = timestampUtc;
-                            _buffer.Add(new TranscriptionItem { TimestampUtc = timestampUtc, Text = text, IsMeaningful = true });
+                            // Use current time for anchors and buffered item to keep silence calculations consistent
+                            LastHeardAt = now;
+                            _buffer.Add(new TranscriptionItem { TimestampUtc = now, Text = text, IsMeaningful = true });
                             _processingConsidered = false;
                         }
                     }
