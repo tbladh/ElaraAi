@@ -135,14 +135,22 @@ public sealed class ConversationStateMachine
                     if (meaningful)
                     {
                         // Record last speech time and accumulate meaningful text to buffer.
-                        LastHeardAt = timestampUtc;
+                        // Use wall-clock now for silence anchoring to avoid retroactive long-silence from stale timestamps
+                        var now = _time.UtcNow;
+                        LastHeardAt = now;
+                        // If this is the first meaningful content in this Listening session,
+                        // re-anchor ListeningSince to now so ProcessingSilence starts from actual speech
+                        if (_buffer.Count == 0)
+                        {
+                            ListeningSince = now;
+                        }
                         _buffer.Add(new TranscriptionItem { TimestampUtc = timestampUtc, Text = text, IsMeaningful = true });
                         // New speech resets processing consideration edge
                         _processingConsidered = false;
                     }
 
-                    // Evaluate silence windows
-                    EvaluateSilence(timestampUtc);
+                    // Evaluate silence windows using wall-clock now to avoid stale timestamp effects
+                    EvaluateSilence(_time.UtcNow);
                     break;
 
                 case ConversationMode.Processing:
