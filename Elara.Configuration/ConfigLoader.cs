@@ -31,15 +31,21 @@ namespace Elara.Configuration
             {
                 var dir = Path.GetDirectoryName(path!) ?? AppContext.BaseDirectory;
                 var fileName = Path.GetFileName(path!);
+                var baseName = Path.GetFileNameWithoutExtension(fileName);
+                var ext = Path.GetExtension(fileName);
                 builder.SetBasePath(dir)
                        .AddJsonFile(fileName, optional: false, reloadOnChange: true)
-                       .AddJsonFile($"{Path.GetFileNameWithoutExtension(fileName)}.{env}{Path.GetExtension(fileName)}", optional: true, reloadOnChange: true);
+                       .AddJsonFile($"{baseName}.{env}{ext}", optional: true, reloadOnChange: true)
+                       // Always-last override layer for local/test deployment scenarios
+                       .AddJsonFile($"{baseName}.Override{ext}", optional: true, reloadOnChange: true);
             }
             else
             {
                 builder.SetBasePath(AppContext.BaseDirectory)
                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                       .AddJsonFile($"appsettings.{env}.json", optional: true, reloadOnChange: true);
+                       .AddJsonFile($"appsettings.{env}.json", optional: true, reloadOnChange: true)
+                       // Always-last override layer for local/test deployment scenarios
+                       .AddJsonFile("appsettings.Override.json", optional: true, reloadOnChange: true);
             }
 
             builder.AddEnvironmentVariables();
