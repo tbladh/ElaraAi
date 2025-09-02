@@ -1,6 +1,12 @@
 # Context Management and Prompt Building
 
-This document specifies a minimal, extensible architecture for conversation context management and system prompt building for Elara. It is designed to work with the current Ollama-based model integration and to evolve into RAG later, without changing higher layers.
+This document specifies a minimal, extensible architecture for conversation context management and system prompt building for Elara. It is designed to work with the current Ollama-based model integration and to evolve into RAG later, without changing higher layers. Changes in this revision:
+
+- Dynamic context sizing ("Last N") is supported at call time, not constructor time.
+- `IContextProvider.GetContextAsync(...)` now receives the current prompt and desired `n` to enable both Last-N and RAG/embedding strategies.
+- Timestamps are required on every stored record and the prompt carries the current time for LLM awareness.
+- Conversation records are symmetrically encrypted on disk with a key read from `appsettings.json` (hashed before use). Default key is `"replace-me-before-deployment"` and must be replaced for production.
+- Records are stored under the default cache directory (see `AppPaths.GetCacheRoot()`), in a `Conversation/` subdirectory.
 
 Key constraints:
 - No "session" concept in the conversation architecture (sessions are only for unit-test recordings).
@@ -10,8 +16,10 @@ Key constraints:
 - Keep it simple and extensible.
 
 Related current code:
-- `Elara.Host/Pipeline/ConversationStateMachine.cs`: emits `PromptReady` with the aggregated user utterance and handles conversation modes.
-- `Elara.Host/Core/Interfaces/ILanguageModelService.cs` and `Elara.Host/Intelligence/OllamaLanguageModelService.cs`: current LLM integration using `SystemPrompt` and a single `prompt` string.
+- `Elara.Pipeline/ConversationStateMachine.cs`: emits `PromptReady` with the aggregated user utterance and handles conversation modes.
+- `Elara.Core/Paths/ModelPaths.cs` and `Elara.Host/Tools/AppPaths.cs`: resolve cache roots consistently.
+- `Elara.Core`/`Elara.Host` logging and configuration patterns should be followed.
+- `Elara.Intelligence/OllamaLanguageModelService.cs`: current LLM integration using `SystemPrompt` and a single `prompt` string.
 
 
 ## High-Level Architecture
@@ -60,6 +68,8 @@ public sealed class Prompt
     public required string System { get; init; }
     public required IReadOnlyList<ChatMessage> Context { get; init; }
     public required string UserInput { get; init; }
+    // Current UTC time, always provided to LLM for temporal awareness
+    public required DateTimeOffset NowUtc { get; init; }
     public IDictionary<string, string>? Hints { get; init; }
 }
 ```
@@ -78,7 +88,8 @@ public interface IConversationStore
 
 public interface IContextProvider
 {
-    Task<IReadOnlyList<ChatMessage>> GetContextAsync(CancellationToken ct = default);
+    // Provide the current prompt (may be used for retrieval/embedding) and desired context size.
+    Task<IReadOnlyList<ChatMessage>> GetContextAsync(string currentPrompt, int n, CancellationToken ct = default);
 }
 
 public interface ISystemPromptProvider
@@ -88,7 +99,7 @@ public interface ISystemPromptProvider
 
 public interface IPromptBuilder
 {
-    Task<Prompt> BuildAsync(string userInput, CancellationToken ct = default);
+    Task<Prompt> BuildAsync(string userInput, int desiredContextN, CancellationToken ct = default);
 }
 
 // An adapter that converts a Prompt to the provider's request shape
@@ -106,16 +117,15 @@ Notes:
 
 These examples show intended shapes. Do not implement yet.
 
-### Last-N Context Provider
+### Last-N Context Provider (dynamic)
 
 ```csharp
 public sealed class LastNContextProvider : IContextProvider
 {
     private readonly IConversationStore _store;
-    private readonly int _lastN;
-    public LastNContextProvider(IConversationStore store, int lastN) { _store = store; _lastN = lastN; }
-    public Task<IReadOnlyList<ChatMessage>> GetContextAsync(CancellationToken ct = default)
-        => _store.ReadTailAsync(_lastN, ct);
+    public LastNContextProvider(IConversationStore store) { _store = store; }
+    public Task<IReadOnlyList<ChatMessage>> GetContextAsync(string currentPrompt, int n, CancellationToken ct = default)
+        => _store.ReadTailAsync(n, ct);
 }
 ```
 
@@ -144,14 +154,14 @@ public sealed class PromptBuilder : IPromptBuilder
         _contextProviders = contextProviders;
     }
 
-    public async Task<Prompt> BuildAsync(string userInput, CancellationToken ct = default)
+    public async Task<Prompt> BuildAsync(string userInput, int desiredContextN, CancellationToken ct = default)
     {
         var sys = await _system.GetSystemPromptAsync(ct);
         var context = new List<ChatMessage>();
         foreach (var p in _contextProviders)
-            context.AddRange(await p.GetContextAsync(ct));
+            context.AddRange(await p.GetContextAsync(userInput, desiredContextN, ct));
 
-        return new Prompt { System = sys, Context = context, UserInput = userInput };
+        return new Prompt { System = sys, Context = context, UserInput = userInput, NowUtc = DateTimeOffset.UtcNow };
     }
 }
 ```
@@ -179,12 +189,9 @@ public sealed class OllamaPromptRenderer : IPromptRenderer<string>
 ```
 
 
-## Persistence Strategy (Append-only, per-message JSON files)
+## Persistence Strategy (Append-only, per-message JSON files, encrypted)
 
-- Cross-platform root directory (resolved via a small `IPathProvider`):
-  - Windows: `%APPDATA%/Elara/Conversation`
-  - macOS: `~/Library/Application Support/Elara/Conversation`
-  - Linux: `$XDG_DATA_HOME/Elara/Conversation` or `~/.local/share/Elara/Conversation`
+- Root directory: `Path.Combine(AppPaths.GetCacheRoot(), "Conversation")`. Ensure the directory exists.
 
 - File layout:
   - Directory: `Conversation/`
@@ -192,7 +199,16 @@ public sealed class OllamaPromptRenderer : IPromptRenderer<string>
     - `seq`: zero-padded in-memory counter to disambiguate equal timestamps within the same process run.
     - `role`: `user`, `assistant`, or `system`.
 
-- File content: single JSON object representing a complete `ChatMessage`.
+- File content: single JSON object representing a complete `ChatMessage`, then symmetrically encrypted before writing to disk. Envelope format (example):
+
+```json
+{
+  "alg": "AES-256-GCM",
+  "iv": "base64-nonce-12-bytes",
+  "ciphertext": "base64-bytes",
+  "tag": "base64-auth-tag"
+}
+```
 
 Example file content:
 
@@ -208,12 +224,14 @@ Example file content:
 }
 ```
 
+Encryption key derivation: take the UTF-8 bytes of the configured key string, compute SHA-256, and use the 32-byte result as the AES-GCM key. The configured string may be human-readable; the default is `"replace-me-before-deployment"`.
+
 ### FileConversationStore (concept)
 
 ```csharp
 public sealed class FileConversationStore : IConversationStore
 {
-    private readonly string _root; // e.g., %APPDATA%/Elara/Conversation
+    private readonly string _root; // e.g., CacheRoot/Conversation
     private int _seq = 0;
 
     public FileConversationStore(string root) { Directory.CreateDirectory(root); _root = root; }
@@ -225,7 +243,8 @@ public sealed class FileConversationStore : IConversationStore
         var seq = Interlocked.Increment(ref _seq).ToString("D4");
         var path = Path.Combine(_root, $"{ts}_{seq}_{role}.json");
         var json = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = false });
-        await File.WriteAllTextAsync(path, json, ct);
+        // Encrypt json -> envelopeJson using AES-256-GCM with key derived from SHA-256(configKey)
+        await File.WriteAllTextAsync(path, envelopeJson, ct);
     }
 
     public async Task<IReadOnlyList<ChatMessage>> ReadTailAsync(int n, CancellationToken ct = default)
@@ -240,7 +259,8 @@ public sealed class FileConversationStore : IConversationStore
         foreach (var f in files)
         {
             using var s = File.OpenRead(f);
-            var msg = await JsonSerializer.DeserializeAsync<ChatMessage>(s, cancellationToken: ct);
+            // Read envelope, decrypt to json, then deserialize ChatMessage
+            var msg = await DeserializeDecryptedAsync(s, ct);
             if (msg != null) list.Add(msg);
         }
         return list;
@@ -280,18 +300,19 @@ fsm.PromptReady += async (text) =>
 
 ## Configuration
 
-Add to `appsettings.json` later:
+Add to `appsettings.json`:
 
 ```json
 {
   "Context": {
     "LastN": 6,
-    "StorageRoot": null
+    "StorageRoot": null,
+    "EncryptionKey": "replace-me-before-deployment"
   }
 }
 ```
 
-- `StorageRoot = null` means use default per-OS location; otherwise use explicit path.
+- `StorageRoot = null` means use default cache location via `AppPaths.GetCacheRoot()`; otherwise use explicit path.
 
 
 ## RAG Extensibility (Future)
@@ -347,7 +368,7 @@ ASCII (portable):
 ## Roadmap
 
 - Phase 1 (design): this document.
-- Phase 2 (MVP): `FileConversationStore`, `LastNContextProvider`, `SystemPromptProvider`, `PromptBuilder`, `OllamaPromptRenderer`, and host wiring.
+- Phase 2 (MVP): `FileConversationStore` (encrypted), `LastNContextProvider` (dynamic n), `SystemPromptProvider`, `PromptBuilder` (includes `NowUtc`), `OllamaPromptRenderer`. Host wiring intentionally deferred: do NOT modify `ConversationStateMachine` yet.
 - Phase 3 (hardening): tail-read optimization, redaction hook, optional seq persistence.
 - Phase 4 (RAG-ready): `IRagRetriever`/`IEmbedder` interfaces and `RagContextProvider` with a stub retriever.
 - Phase 5 (providers): add provider-specific renderers that support structured chat arrays where available.
