@@ -1,0 +1,7 @@
+<Project>
+  <!-- Central build settings shared by all projects in this repository. -->
+  <PropertyGroup>
+    <!-- Enforce warnings-as-errors across all configurations and projects. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

@@ -24,6 +24,7 @@ namespace Elara.Host
     /// </summary>
     internal class Program
     {
+        
         // Legacy constants (kept for reference; values now sourced from config)
         private const int ChunkMs = 3000;         // unused; segmentation uses config.Segmenter
 
