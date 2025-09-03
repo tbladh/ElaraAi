@@ -11,6 +11,19 @@ public sealed class AppConfig
     /// </summary>
     public required HostConfig Host { get; init; }
 
+/// <summary>
+/// Conversation context and storage configuration.
+/// </summary>
+public sealed class ContextConfig
+{
+    /// <summary>Default number of messages to fetch for Last-N strategies.</summary>
+    public int LastN { get; init; } = 6;
+    /// <summary>Optional explicit storage root; null uses cache root via AppPaths.</summary>
+    public string? StorageRoot { get; init; }
+    /// <summary>Symmetric encryption key string (hashed with SHA-256 before use). Replace for deployment.</summary>
+    public string EncryptionKey { get; init; } = "replace-me-before-deployment";
+}
+
     /// <summary>
     /// Logging settings (directories, file name pattern, levels).
     /// </summary>
@@ -37,6 +50,11 @@ public sealed class AppConfig
     /// Short randomized phrases for acknowledgements.
     /// </summary>
     public AnnouncementsOptions Announcements { get; init; } = new();
+
+    /// <summary>
+    /// Conversation context management configuration (optional).
+    /// </summary>
+    public ContextConfig Context { get; init; } = new();
 
 }
 

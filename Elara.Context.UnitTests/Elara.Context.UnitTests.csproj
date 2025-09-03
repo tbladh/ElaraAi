@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Elara.Host\Elara.Host.csproj" />
+    <ProjectReference Include="..\Elara.Context\Elara.Context.csproj" />
   </ItemGroup>
 
 </Project>
