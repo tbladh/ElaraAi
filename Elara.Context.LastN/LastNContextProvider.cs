@@ -1,9 +1,6 @@
 using Elara.Context.Contracts;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 
-namespace Elara.Context
+namespace Elara.Context.LastN
 {
     public sealed class LastNContextProvider : IContextProvider
     {

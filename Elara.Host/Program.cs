@@ -25,9 +25,6 @@ namespace Elara.Host
     internal class Program
     {
         
-        // Legacy constants (kept for reference; values now sourced from config)
-        private const int ChunkMs = 3000;         // unused; segmentation uses config.Segmenter
-
         /// <summary>
         /// Entry point that composes the pipeline and runs until canceled.
         /// </summary>

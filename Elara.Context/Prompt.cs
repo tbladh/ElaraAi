@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Elara.Context
 {
     public sealed class Prompt
