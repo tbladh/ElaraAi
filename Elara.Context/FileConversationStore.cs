@@ -2,6 +2,7 @@ using System.Text.Json;
 using Elara.Context.Contracts;
 using Elara.Core.Paths;
 using Elara.Context.Extensions;
+using System.Text.Encodings.Web;
 
 namespace Elara.Context
 {
@@ -15,6 +16,11 @@ namespace Elara.Context
         private readonly string _root;
         private readonly byte[]? _key; // null => encryption disabled
         private int _seq;
+        private static readonly JsonSerializerOptions EnvelopeJsonOptions = new()
+        {
+            WriteIndented = false,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
   
         /// <summary>
         /// Create store using the provided storage root and optional encryption key string.
@@ -55,12 +61,12 @@ namespace Elara.Context
             if (_key is not null)
             {
                 var encEnv = json.ToEncryptedEnvelope(_key); // Envelope<string>
-                toWrite = JsonSerializer.Serialize(encEnv, new JsonSerializerOptions { WriteIndented = false });
+                toWrite = JsonSerializer.Serialize(encEnv, EnvelopeJsonOptions);
             }
             else
             {
                 var plainEnv = json.ToPlaintextEnvelope(); // Envelope<JsonElement>
-                toWrite = JsonSerializer.Serialize(plainEnv, new JsonSerializerOptions { WriteIndented = false });
+                toWrite = JsonSerializer.Serialize(plainEnv, EnvelopeJsonOptions);
             }
 
             var ts = message.TimestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'");

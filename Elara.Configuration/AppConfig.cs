@@ -18,6 +18,8 @@ public sealed class ContextConfig
 {
     /// <summary>Default number of messages to fetch for Last-N strategies.</summary>
     public int LastN { get; init; } = 6;
+    /// <summary>Context provider to use: "last-n" (default) or "rag" (future).</summary>
+    public string Provider { get; init; } = "last-n";
     /// <summary>Optional explicit storage root; null uses cache root via AppPaths.</summary>
     public string? StorageRoot { get; init; }
     /// <summary>Symmetric encryption key string (hashed with SHA-256 before use). Replace for deployment.</summary>

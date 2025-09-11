@@ -50,6 +50,8 @@
     <ProjectReference Include="..\Elara.Logging\Elara.Logging.csproj" />
     <ProjectReference Include="..\Elara.Pipeline\Elara.Pipeline.csproj" />
     <ProjectReference Include="..\Elara.Speech\Elara.Speech.csproj" />
+    <ProjectReference Include="..\Elara.Context\Elara.Context.csproj" />
+    <ProjectReference Include="..\Elara.Context.LastN\Elara.Context.LastN.csproj" />
   </ItemGroup>
 
   <!-- Internalized minimal dependencies; no project references needed -->

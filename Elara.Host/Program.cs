@@ -15,6 +15,9 @@ using Elara.Pipeline;
 using Elara.Host.Utilities;
 using Elara.Core;
 using Elara.Core.Time;
+using Elara.Context;
+using Elara.Context.Contracts;
+using Elara.Context.LastN;
 
 namespace Elara.Host
 {
@@ -169,6 +172,21 @@ namespace Elara.Host
                             return ttsSvc;
                         }
                     });
+                    // Conversation store (file-backed) with optional encryption; defaults to CacheRoot/Conversation when StorageRoot is null/empty
+                    services.AddSingleton<IConversationStore>(_ => new FileConversationStore(
+                        config.Context.StorageRoot,
+                        config.Context.EncryptionKey));
+                    // Context provider selection via configuration (default: last-n)
+                    services.AddSingleton<IContextProvider>(sp =>
+                    {
+                        var store = sp.GetRequiredService<IConversationStore>();
+                        var providerKey = (config.Context.Provider ?? "last-n").ToLowerInvariant();
+                        return providerKey switch
+                        {
+                            // Future: "rag" => new RagContextProvider(...)
+                            _ => new LastNContextProvider(store)
+                        };
+                    });
                 })
                 .Build();
 
@@ -217,6 +235,11 @@ namespace Elara.Host
             var tts = host.Services.GetRequiredService<ITextToSpeechService>();
             var ttsEnabled = config.TextToSpeech.Enabled;
             var announcerPlayer = new AnnouncementPlayer(tts);
+            var store = host.Services.GetRequiredService<IConversationStore>();
+            var contextProvider = host.Services.GetRequiredService<IContextProvider>();
+            // Attach consolidated prompt handling service
+            var promptHandler = new PromptHandlingService(llm, tts, store, contextProvider, ttsEnabled);
+            promptHandler.Attach(csm, config.Context.LastN, cts.Token);
 
             // Suppression window to ignore transcriptions captured while the AI is Processing/Speaking
             // This prevents feedback where speaker output is picked up by the mic and later processed.
@@ -262,43 +285,7 @@ namespace Elara.Host
                     suppressEnd = at;
                 }
             };
-            csm.PromptReady += (prompt) =>
-            {
-                Task.Run(async () =>
-                {
-                    try
-                    {
-                        Logger.Info(HostConstants.Log.Ai, "Calling language model...");
-                        var reply = await llm.GetResponseAsync(prompt, cts.Token); // Processing -> model call
-                        Logger.Info(HostConstants.Log.Ai, $"Response: {reply}");
-                        if (ttsEnabled)
-                        {
-                            // Transition: Processing -> Speaking for audio output
-                            csm.BeginSpeaking();
-                            try
-                            {
-                                await tts.SpeakToDefaultOutputAsync(reply);
-                            }
-                            finally
-                            {
-                                csm.EndSpeaking(); // Speaking -> Listening
-                            }
-                        }
-                        else
-                        {
-                            // No audio output: end processing explicitly (Processing -> Listening)
-                            csm.EndProcessing();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error(HostConstants.Log.Ai, $"Error handling prompt: {ex.Message}");
-                        // Ensure we leave current active phase on error
-                        if (csm.IsSpeaking) csm.EndSpeaking();
-                        else csm.EndProcessing();
-                    }
-                }, cts.Token);
-            };
+            // Prompt handling is now encapsulated; no inline PromptReady subscription here.
 
             Console.WriteLine(HostConstants.ConsoleText.SandboxIntro);
             Console.WriteLine($"Wake word: '{config.Host.WakeWord}', processing after {config.Host.ProcessingSilenceSeconds}s silence, end after {config.Host.EndSilenceSeconds}s silence.");
