@@ -22,8 +22,8 @@ public sealed class ContextConfig
     public string Provider { get; init; } = "last-n";
     /// <summary>Optional explicit storage root; null uses cache root via AppPaths.</summary>
     public string? StorageRoot { get; init; }
-    /// <summary>Symmetric encryption key string (hashed with SHA-256 before use). Replace for deployment.</summary>
-    public string EncryptionKey { get; init; } = "replace-me-before-deployment";
+    /// <summary>Symmetric encryption key string (hashed with SHA-256 before use). Leave empty to disable encryption.</summary>
+    public string EncryptionKey { get; init; } = string.Empty;
 }
 
     /// <summary>

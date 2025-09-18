@@ -110,7 +110,7 @@ public interface IPromptRenderer<TProviderRequest>
 ```
 
 Notes:
-- We keep `ILanguageModelService` unchanged. For Ollama, `TProviderRequest` will be a pair of strings: `(system, prompt)`, or we can render directly to a string prompt while setting `SystemPrompt` separately.
+- `ILanguageModelService` now accepts a structured prompt (system instructions, context, and the current user turn) rather than a plain string. Rendering should populate that contract for the provider-specific service.
 
 
 ## Minimal Implementations (Conceptual)
@@ -286,9 +286,8 @@ fsm.PromptReady += async (text) =>
     var prompt = await promptBuilder.BuildAsync(text);
 
     // Render for Ollama
-    var rendered = await renderer.RenderAsync(prompt);
-    lm.SystemPrompt = prompt.System; // ILanguageModelService remains unchanged
-    var assistantText = await lm.GetResponseAsync(rendered);
+    var structuredPrompt = await renderer.RenderAsync(prompt); // returns StructuredPrompt
+    var assistantText = await lm.GetResponseAsync(structuredPrompt);
 
     var assistantMsg = new ChatMessage { Role = ChatRole.Assistant, Content = assistantText, TimestampUtc = DateTimeOffset.UtcNow };
     await store.AppendMessageAsync(assistantMsg);

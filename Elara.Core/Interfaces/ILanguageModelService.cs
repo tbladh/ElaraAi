@@ -1,3 +1,5 @@
+using Elara.Core.Prompts;
+
 namespace Elara.Core.Interfaces
 {
     /// <summary>
@@ -8,10 +10,10 @@ namespace Elara.Core.Interfaces
         /// <summary>
         /// Gets a response from the language model for the given prompt
         /// </summary>
-        /// <param name="prompt">The input prompt</param>
+        /// <param name="prompt">Structured prompt data providing system instructions, context, and the user turn.</param>
         /// <param name="cancellationToken">Token to cancel the operation</param>
         /// <returns>The model's response</returns>
-        Task<string> GetResponseAsync(string prompt, CancellationToken cancellationToken = default);
+        Task<string> GetResponseAsync(StructuredPrompt prompt, CancellationToken cancellationToken = default);
         
         /// <summary>
         /// Gets the available models for this service

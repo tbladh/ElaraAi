@@ -1,9 +1,15 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Elara.Core.Interfaces;
 using Elara.Core.Extensions;
+using Elara.Core.Prompts;
 using Elara.Logging;
+using System.Text;
+using System.Text.Json;
 
 namespace Elara.Host.Intelligence
 {
@@ -53,14 +59,18 @@ namespace Elara.Host.Intelligence
         }
 
         /// <summary>
-        /// Gets a response from the language model for the given prompt using the configured system prompt.
+        /// Gets a response from the language model for the given structured prompt using the configured system prompt.
         /// </summary>
-        /// <param name="prompt">User prompt to send to the model.</param>
+        /// <param name="prompt">Structured prompt containing system instructions, context, and the current user turn.</param>
         /// <param name="cancellationToken">Cancellation token for the HTTP call.</param>
         /// <returns>Post-processed text response (filters applied).</returns>
-        public async Task<string> GetResponseAsync(string prompt, CancellationToken cancellationToken = default)
+        public async Task<string> GetResponseAsync(StructuredPrompt prompt, CancellationToken cancellationToken = default)
         {
-            return await SendGenerateAsync(prompt, SystemPrompt, stream: false, cancellationToken);
+            if (prompt is null)
+            {
+                throw new ArgumentNullException(nameof(prompt));
+            }
+            return await SendGenerateAsync(prompt, stream: false, cancellationToken);
         }
 
         /// <summary>
@@ -71,7 +81,18 @@ namespace Elara.Host.Intelligence
         /// <returns>Raw model response with filters applied.</returns>
         public Task<string> BarePromptAsync(string prompt, CancellationToken cancellationToken = default)
         {
-            return SendGenerateAsync(prompt, system: null, stream: false, cancellationToken);
+            var structured = new StructuredPrompt
+            {
+                SystemPrompt = string.Empty,
+                Context = Array.Empty<PromptMessage>(),
+                User = new PromptMessage
+                {
+                    Role = "user",
+                    Content = prompt,
+                    TimestampUtc = DateTimeOffset.UtcNow
+                }
+            };
+            return SendGenerateAsync(structured, stream: false, cancellationToken);
         }
 
         /// <summary>
@@ -90,22 +111,32 @@ namespace Elara.Host.Intelligence
         /// <summary>
         /// Core non-streaming generate path. Serialized by a semaphore to reduce server overload.
         /// </summary>
-        /// <param name="prompt">Prompt text.</param>
-        /// <param name="system">System prompt, or null to omit.</param>
+        /// <param name="prompt">Structured prompt data.</param>
         /// <param name="stream">Must be false; streaming not supported in this method.</param>
         /// <param name="cancellationToken">Cancellation token passed to HTTP calls.</param>
         /// <returns>Response text with <see cref="OutputFilters"/> applied.</returns>
         /// <exception cref="InvalidOperationException">If called with stream=true.</exception>
-        private async Task<string> SendGenerateAsync(string prompt, string? system, bool stream, CancellationToken cancellationToken)
+        private async Task<string> SendGenerateAsync(StructuredPrompt prompt, bool stream, CancellationToken cancellationToken)
         {
             await EnsureModelSelectedAsync();
+
+            var normalizedPrompt = new StructuredPrompt
+            {
+                SystemPrompt = string.IsNullOrWhiteSpace(prompt.SystemPrompt) ? SystemPrompt : prompt.SystemPrompt,
+                Context = prompt.Context ?? Array.Empty<PromptMessage>(),
+                User = prompt.User,
+                Hints = prompt.Hints
+            };
+
+            var rendered = JsonPromptBuilder.Build(normalizedPrompt);
+            Logger.Debug("LLM", $"Structured prompt payload:\n{rendered.LogJson}");
 
             var request = new OllamaGenerateRequest
             {
                 Model = CurrentModel,
-                Prompt = prompt,
-                System = system,
-                Stream = stream
+                Prompt = rendered.PromptJson,
+                System = null, // string.IsNullOrWhiteSpace(normalizedPrompt.SystemPrompt) ? null : normalizedPrompt.SystemPrompt,
+                Stream = stream,
             };
 
             if (!stream)
@@ -113,15 +144,24 @@ namespace Elara.Host.Intelligence
                 await _generateLock.WaitAsync(cancellationToken);
                 try
                 {
-                    // Debug log of full JSON payload being sent to the LLM
+                    var jsonOptions = new JsonSerializerOptions
+                    {
+                        WriteIndented = true,
+                        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                    };
+                    string payload;
                     try
                     {
-                        var json = request.ToPrettyJson();
-                        Logger.Debug("LLM", $"Sending prompt to LLM:\n{json}");
+                        payload = JsonSerializer.Serialize(request, jsonOptions);
                     }
-                    catch { /* logging best-effort */ }
+                    catch
+                    {
+                        payload = request.ToPrettyJson();
+                    }
+                    Logger.Debug("LLM", $"Sending prompt to LLM:\n{payload}");
 
-                    var resp = await _httpClient.PostAsJsonAsync("/api/generate", request, cancellationToken);
+                    var content = new StringContent(payload, Encoding.UTF8, "application/json");
+                    var resp = await _httpClient.PostAsync("/api/generate", content, cancellationToken);
                     resp.EnsureSuccessStatusCode();
                     var result = await resp.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cancellationToken: cancellationToken);
                     var text = result?.Response ?? string.Empty;
@@ -133,7 +173,6 @@ namespace Elara.Host.Intelligence
                 }
             }
 
-            // Streaming is handled by GetStreamingResponseAsync; this method shouldn't be called with stream=true
             throw new InvalidOperationException("SendGenerateAsync was called with stream=true. Use GetStreamingResponseAsync for streaming responses.");
         }
 
@@ -215,15 +254,16 @@ namespace Elara.Host.Intelligence
             [JsonPropertyName("model")]
             public string Model { get; set; } = string.Empty;
 
-            [JsonPropertyName("prompt")]
-            public string Prompt { get; set; } = string.Empty;
-
             [JsonPropertyName("system")]
             public string? System { get; set; }
 
             [JsonPropertyName("stream")]
             public bool Stream { get; set; }
-        }
+
+                        [JsonPropertyName("prompt")]
+            public string Prompt { get; set; } = string.Empty;
+
+                    }
 
         private class OllamaGenerateResponse
         {

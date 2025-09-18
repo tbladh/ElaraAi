@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using Elara.Audio;
 using Elara.Speech;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +15,7 @@ using Elara.Pipeline;
 using Elara.Host.Utilities;
 using Elara.Core;
 using Elara.Core.Time;
+using Elara.Core.Paths;
 using Elara.Context;
 using Elara.Context.Contracts;
 using Elara.Context.LastN;
@@ -144,6 +145,18 @@ namespace Elara.Host
                         {
                             sysPrompt = sysPrompt.Replace(HostConstants.Placeholders.WakeWord, config.Host.WakeWord ?? string.Empty, StringComparison.OrdinalIgnoreCase);
                         }
+                        // Explain the JSON prompt format in plain text, since SystemPrompt is a string
+                        var jsonPromptGuidance =
+                            "You will receive the user's request as a JSON object in the 'prompt' field. " +
+                            "That JSON contains: (1) a property named history, which is an array of items; each item has a role (one of user, assistant, or system), a content string, and a timestampUtc in ISO-8601 format; " +
+                            "(2) a property named user, which holds the current user request with a content string and a timestampUtc in ISO-8601 format; and (3) an optional property named hints with additional key-value guidance. " +
+                            "Use the history only as background memory and answer based on user.content. Do not echo the JSON or any metadata. Respond concisely with plain text suitable for text-to-speech.";
+                        if (!string.IsNullOrWhiteSpace(jsonPromptGuidance))
+                        {
+                            sysPrompt = string.IsNullOrWhiteSpace(sysPrompt)
+                                ? jsonPromptGuidance
+                                : sysPrompt + "\n\n" + jsonPromptGuidance;
+                        }
                         svc.SystemPrompt = sysPrompt;
                         svc.OutputFilters = new List<string>(config.LanguageModel.OutputFilters ?? Array.Empty<string>());
                         return svc;
@@ -191,6 +204,14 @@ namespace Elara.Host
                 .Build();
 
             Logger.Debug(HostConstants.Log.Program, "Host built and services configured.");
+
+            // Report conversation store configuration (directory and encryption)
+            var resolvedConversationDir = string.IsNullOrWhiteSpace(config.Context.StorageRoot)
+                ? Path.Combine(ModelPaths.GetCacheRoot(), "Conversation")
+                : config.Context.StorageRoot!;
+            var encryptionEnabled = !string.IsNullOrWhiteSpace(config.Context.EncryptionKey);
+            Logger.Info(HostConstants.Log.Program, $"Conversation store directory: {resolvedConversationDir}");
+            Logger.Info(HostConstants.Log.Program, $"Conversation encryption: {(encryptionEnabled ? "enabled" : "disabled")}");
 
             // Channel for audio chunks from Streamer -> Transcriber
             var audioChannel = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(config.Host.AudioQueueCapacity)
@@ -399,3 +420,6 @@ namespace Elara.Host
         }
     }
 }
+
+
+

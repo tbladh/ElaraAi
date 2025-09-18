@@ -1,6 +1,9 @@
+using System;
+using System.Collections.Generic;
 using Elara.Context;
 using Elara.Context.Contracts;
 using Elara.Core.Interfaces;
+using Elara.Core.Prompts;
 using Elara.Logging;
 using Elara.Pipeline;
 
@@ -40,27 +43,34 @@ namespace Elara.Host.Utilities
                 {
                     try
                     {
-                        // Persist user message
+                        var nowUtc = DateTimeOffset.UtcNow;
+                        var context = await _contextProvider.GetContextAsync(prompt, lastN, ct).ConfigureAwait(false)
+                                      ?? Array.Empty<ChatMessage>();
+
+                        var contextMessages = ConvertContext(context);
+
                         var userMsg = new ChatMessage
                         {
                             Role = ChatRole.User,
                             Content = prompt,
-                            TimestampUtc = DateTimeOffset.UtcNow,
+                            TimestampUtc = nowUtc,
                             Metadata = null
                         };
+
+                        // Persist the user turn before the LLM call so it is available for subsequent requests
                         await _store.AppendMessageAsync(userMsg, ct).ConfigureAwait(false);
 
-                        // Retrieve context
-                        var context = await _contextProvider.GetContextAsync(prompt, lastN, ct).ConfigureAwait(false);
-
-                        // Build combined textual prompt
-                        var combinedPrompt = PromptFormatter.FormatWithContext(context, prompt);
+                        var structuredPrompt = new StructuredPrompt
+                        {
+                            SystemPrompt = _llm.SystemPrompt,
+                            Context = contextMessages,
+                            User = ToPromptMessage(userMsg)
+                        };
 
                         Logger.Info(HostConstants.Log.Ai, "Calling language model...");
-                        var reply = await _llm.GetResponseAsync(combinedPrompt, ct).ConfigureAwait(false);
+                        var reply = await _llm.GetResponseAsync(structuredPrompt, ct).ConfigureAwait(false);
                         Logger.Info(HostConstants.Log.Ai, $"Response: {reply}");
 
-                        // Persist assistant message
                         var assistantMsg = new ChatMessage
                         {
                             Role = ChatRole.Assistant,
@@ -89,11 +99,40 @@ namespace Elara.Host.Utilities
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error(HostConstants.Log.Ai, $"Error handling prompt: {ex.Message}");
+                        Logger.Error(HostConstants.Log.Ai, $"+Error handling prompt: {ex.Message}");
                         if (csm.IsSpeaking) csm.EndSpeaking(); else csm.EndProcessing();
                     }
                 }, ct);
             };
         }
+
+        private static IReadOnlyList<PromptMessage> ConvertContext(IEnumerable<ChatMessage> context)
+        {
+            var result = new List<PromptMessage>();
+            foreach (var message in context)
+            {
+                result.Add(ToPromptMessage(message));
+            }
+            return result;
+        }
+
+        private static PromptMessage ToPromptMessage(ChatMessage message)
+        {
+            return new PromptMessage
+            {
+                Role = RenderRole(message.Role),
+                Content = message.Content,
+                TimestampUtc = message.TimestampUtc.ToUniversalTime()
+            };
+        }
+
+        private static string RenderRole(ChatRole role) => role switch
+        {
+            ChatRole.User => "user",
+            ChatRole.Assistant => "assistant",
+            ChatRole.System => "system",
+            _ => role.ToString().ToLowerInvariant()
+        };
     }
 }
+
