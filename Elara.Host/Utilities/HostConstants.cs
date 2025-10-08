@@ -66,7 +66,7 @@ namespace Elara.Host.Utilities
         public static class ConsoleText
         {
             public const string QuitHint = "Press 'Q' to quit or use Ctrl+C to stop.";
-            public const string SandboxIntro = "Sandbox: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.";
+            public const string HostIntro = "Host ready: Recording chunks and printing transcriptions. Press 'Q' to quit or Ctrl+C to stop.";
         }
     }
 }

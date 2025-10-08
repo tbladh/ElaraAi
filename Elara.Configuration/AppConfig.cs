@@ -181,7 +181,7 @@ public sealed class TextToSpeechConfig
 }
 
 /// <summary>
-/// Host-level settings for the sandbox wiring.
+/// Host-level settings for the main wiring.
 /// </summary>
 public sealed class HostConfig
 {
@@ -236,7 +236,7 @@ public sealed class LoggingConfig
     /// <summary>Directory for log files (relative or absolute).</summary>
     public string Directory { get; init; } = "Logs";
     /// <summary>File name pattern supporting {date:format} token.</summary>
-    public string FileNamePattern { get; init; } = "sandbox-{date:yyyyMMdd}.log";
+    public string FileNamePattern { get; init; } = "host-{date:yyyyMMdd}.log";
     /// <summary>Console timestamp format (e.g., "HH:mm:ss ").</summary>
     public string ConsoleTimestampFormat { get; init; } = "HH:mm:ss ";
 }

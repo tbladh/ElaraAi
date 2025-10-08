@@ -4,7 +4,7 @@ using System.IO;
 namespace Elara.Host.Tools
 {
     /// <summary>
-    /// Minimal filesystem helpers for the sandbox composition root.
+    /// Minimal filesystem helpers for the host composition root.
     /// </summary>
     public static class FileSystem
     {

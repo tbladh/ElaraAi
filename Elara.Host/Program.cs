@@ -23,7 +23,7 @@ using Elara.Context.LastN;
 namespace Elara.Host
 {
     /// <summary>
-    /// Sandbox host wiring audio capture, transcription, conversation FSM, LLM, and TTS.
+    /// Host wiring audio capture, transcription, conversation FSM, LLM, and TTS.
     /// The FSM governs transitions: Quiescent -> Listening -> Processing -> (Speaking) -> Listening.
     /// </summary>
     internal class Program
@@ -308,7 +308,7 @@ namespace Elara.Host
             };
             // Prompt handling is now encapsulated; no inline PromptReady subscription here.
 
-            Console.WriteLine(HostConstants.ConsoleText.SandboxIntro);
+            Console.WriteLine(HostConstants.ConsoleText.HostIntro);
             Console.WriteLine($"Wake word: '{config.Host.WakeWord}', processing after {config.Host.ProcessingSilenceSeconds}s silence, end after {config.Host.EndSilenceSeconds}s silence.");
             Logger.Info(HostConstants.Log.Program, $"Configured wake word='{config.Host.WakeWord}', processingSilence={config.Host.ProcessingSilenceSeconds}s, endSilence={config.Host.EndSilenceSeconds}s.");
 

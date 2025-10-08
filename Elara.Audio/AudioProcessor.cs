@@ -6,7 +6,7 @@ using NAudio.Wave;
 namespace Elara.Audio
 {
     /// <summary>
-    /// Minimal <see cref="IAudioProcessor"/> using NAudio for recording and playback in the sandbox.
+    /// Minimal <see cref="IAudioProcessor"/> using NAudio for recording and playback in the host application.
     /// Recording lifecycle is serialized by a semaphore to prevent overlapping Start/Stop calls.
     /// </summary>
     public class AudioProcessor : IAudioProcessor, IDisposable

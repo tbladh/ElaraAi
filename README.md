@@ -1,132 +1,145 @@
 # Elara AI
 
-Elara is a modular, local-first assistant that listens, transcribes, thinks (LLM), and speaks. The solution is split into focused projects to keep concerns separate and enable cross‑platform readiness.
+Elara is a modular, local-first voice assistant built on .NET 8. The host listens for a wake word, segments incoming audio, transcribes it with Whisper, calls a local language model (Ollama by default), optionally speaks the reply, and persists the conversation context on disk with optional encryption.
 
-## Quick Start
+## Highlights
 
-- Requirements
-  - .NET 8 SDK
-  - Windows for System.Speech TTS (otherwise a No‑Op TTS implementation is used)
+- End-to-end audio -> transcription -> LLM -> (optional) text-to-speech pipeline orchestrated by a conversation state machine.
+- Pluggable context stack with a file-backed conversation store (`LastN` today, RAG-ready later).
+- Strongly-typed configuration (`AppConfig`) loaded through the standard Microsoft configuration pipeline with environment/override support.
+- Local-first tooling: Whisper.cpp model download and caching, Ollama HTTP integration, and session recording for regression playback.
+- Logging, announcements, and prompt handling kept in dedicated libraries to maintain a lean host surface.
 
-- Clone
-  ```bash
-  git clone https://github.com/tbladh/ElaraAi.git
-  ```
+## Solution Layout
 
-- Build
-  ```bash
-  dotnet build Elara.sln
-  ```
+- `Elara.Host/` - console host that composes the pipeline, downloads Whisper models, and wires DI.
+- `Elara.Audio/` - audio capture primitives (NAudio-based streamer, segmenter utilities, session recording helpers).
+- `Elara.Speech/` - Whisper-based speech-to-text wrapper plus Windows `System.Speech` text-to-speech and a cross-platform no-op fallback.
+- `Elara.Intelligence/` - Ollama-backed `ILanguageModelService` with structured prompt support and output filtering.
+- `Elara.Pipeline/` - `ConversationStateMachine`, transcription handling, and supporting contracts.
+- `Elara.Context/` - shared chat data contracts, prompt builder, file-backed conversation store with AES-256-GCM envelopes, and system prompt provider.
+- `Elara.Context.LastN/` - last-N context provider that hydrates history from the conversation store.
+- `Elara.Configuration/` - strongly-typed configuration models plus the async loader.
+- `Elara.Logging/` - lightweight logging abstractions, file logging, and console colorizer.
+- `FluentHosting/` - helper abstractions for lightweight hosting scenarios.
+- `Elara.Logging`, `Elara.Audio`, `Elara.Speech`, `Elara.Intelligence`, `Elara.Pipeline`, `Elara.Context`, and peers each have corresponding `*.UnitTests/` projects.
+- `Elara.UnitTests/` - legacy aggregate tests kept for backward compatibility.
+- `Elara.Updater.Dev/` - developer tooling for the (future) updater.
+- `build/` - scripts for generating and updating third-party notices.
+- `ContextManagement.md` - design notes for the context system (current Last-N plus RAG roadmap).
 
-- Run unit tests
-  ```bash
-  dotnet test Elara.sln
-  ```
+## Getting Started
 
-- Run the host app
-  ```bash
-  dotnet run --project Elara.Host
-  ```
+### Requirements
 
-> ⚠️ **Warning (first run download)**
+- .NET 8 SDK
+- Windows for `System.Speech` text-to-speech (other platforms transparently use the no-op TTS service)
+- Ollama running locally (default base URL `http://localhost:11434`) with the configured model pulled, for example `ollama pull cogito:8b`
+
+### Clone
+
+```bash
+git clone https://github.com/tbladh/ElaraAi.git
+```
+
+### Build and Test
+
+```bash
+dotnet build Elara.sln
+dotnet test Elara.sln
+```
+
+### Run the Host
+
+```bash
+dotnet run --project Elara.Host
+```
+
+- Use `dotnet run --project Elara.Host -- --record[=scenarioName]` to capture audio, transcription, and prompt/response metadata under `SampleRuns/<scenarioName>`.
+- Press `Q` or `Esc` to stop the host, or `Ctrl+C`.
+
+> **Model download on first run**
 >
-> On first run, the host will download the configured Whisper STT model (~1.4 GB) and cache it locally. This is a one‑time download per model file.
-> Default cache location:
-> - Windows: `%LOCALAPPDATA%/ElaraAi/Cache/Models/Whisper`
+> The host ensures the configured Whisper model exists before starting the pipeline. On the first run it will download the model (~1.4 GB by default) and cache it under:
+>
+> - Windows: `%LOCALAPPDATA%\ElaraAi\Cache\Models\Whisper`
 > - macOS: `~/Library/Caches/ElaraAi/Models/Whisper`
 > - Linux: `$XDG_CACHE_HOME/ElaraAi/Models/Whisper` or `~/.cache/ElaraAi/Models/Whisper`
 
-- Configure the app
-  - Edit `Elara.Host/appsettings.json`.
-  - Notable sections:
-    - `Host`: wake word and timing settings
-    - `ElaraLogging`: logging level, directory, file naming, console timestamps
-    - `Segmenter`: VAD and audio segmentation thresholds
-    - `Stt`: Whisper model file/url and language
-    - `LanguageModel`: LLM provider settings (e.g., Ollama base URL and model)
-    - `TextToSpeech`: enable/voice/rate/pitch and `PreambleMs` silent preamble
+Conversation history is stored in `Cache/Conversation` alongside the model cache (or the `Context:StorageRoot` you provide). Records are serialized as per-message envelopes and can be encrypted by supplying a key—see the `Context` settings below.
 
-## Repository Structure
+## Configuration
 
-- src
-  - `Elara.Host/`: Composition root (DI, config, startup)
-  - `Elara.Core/`: Shared interfaces, utilities, extensions, configuration types
-  - `Elara.Audio/`: Audio processing primitives (e.g., streaming/recording)
-  - `Elara.Speech/`: STT and TTS services
-    - Windows TTS uses `System.Speech.Synthesis` (guarded by `[SupportedOSPlatform("windows")]`)
-    - Cross‑platform `NoOpTextToSpeechService` is used when not on Windows
-  - `Elara.Intelligence/`: Language model client/services (e.g., Ollama)
-  - `Elara.Pipeline/`: Orchestration (conversation state machine, transcriber)
-  - `FluentHosting/`: Minimal hosting and helpers
-  - `Elara.Updater.Dev/`: Developer tooling for updater
+Runtime configuration lives in `Elara.Host/appsettings.json`. `ConfigLoader` builds the final `AppConfig` using:
 
-- tests
-  - `Elara.Host.UnitTests/`
-  - `Elara.Audio.UnitTests/`
-  - `Elara.Speech.UnitTests/`
-  - `Elara.Intelligence.UnitTests/`
-  - `Elara.Pipeline.UnitTests/`
-  - `FluentHosting.Tests/`
-  - `Elara.UnitTests/` (legacy/aggregate tests)
+1. `appsettings.json`
+2. `appsettings.{DOTNET_ENVIRONMENT}.json`
+3. `appsettings.Override.json`
+4. Environment variables
+5. Command-line arguments
 
-## Architecture Overview
+Set `DOTNET_ENVIRONMENT` (or `ASPNETCORE_ENVIRONMENT`) to switch environments. All configuration is strongly typed; IntelliSense is available inside the project.
 
-- Data flow
-  1. Audio input is captured/streamed (`Elara.Audio`)
-  2. STT turns audio into text (`Elara.Speech`)
-  3. LLM generates a response (`Elara.Intelligence`)
-  4. TTS speaks the response (`Elara.Speech`), with an optional silent preamble
-  5. `Elara.Pipeline` coordinates the end‑to‑end conversation state
+Key sections:
 
-- Configuration binding
-  - Strongly‑typed config in `Elara.Core.Configuration` (e.g., `AppConfig`, `TextToSpeechConfig`, `LoggingConfig`)
-  - `Elara.Host` binds `appsettings.json` to `AppConfig` and wires DI
+- `Segmenter` - RMS/active-ratio thresholds and timing for the VAD that decides when to start or stop buffering speech.
+- `Stt` - Whisper language, local model file name, and the download URL used when bootstrapping.
+- `LanguageModel` - Ollama provider details:
+  - `BaseUrl` and `ModelName` identify the server or model.
+  - `SystemPrompt` accepts placeholders like `{WakeWord}`; the host appends guidance describing the JSON payload sent to the model.
+  - `OutputFilters` is an optional list of regex patterns applied to the reply before speaking or logging.
+- `TextToSpeech` - enable or disable TTS, voice name, playback rate or pitch, and a silent preamble.
+- `Host` - wake word, silence timers (`ProcessingSilenceSeconds`, `EndSilenceSeconds`), channel capacities, ticker cadence, and session recording defaults.
+- `Context` - conversation persistence and retrieval:
+  - `LastN` controls how many historical messages the Last-N provider returns.
+  - `Provider` (currently `last-n`) selects the context strategy.
+  - `StorageRoot` overrides the cache location; leave empty to use the platform cache directory.
+  - `EncryptionKey`, when non-empty, is hashed (SHA-256) and enables AES-256-GCM envelopes for stored messages.
+- `Announcements` - optional wake, prompt, quiescence phrases and startup templates with `{WakeWord}`, `{ModelName}`, `{ModelBaseUrl}`, and `{Voice}` placeholders.
+- `ElaraLogging` - log level, file directory or pattern, and console timestamp format.
 
-- Platform notes
-  - TTS: `TextToSpeechService` is Windows‑only; on other OSes, DI picks `NoOpTextToSpeechService`
-  - This keeps non‑Windows builds compiling without Windows‑only warnings or runtime failures
+Refer to `ContextManagement.md` for the broader context orchestration plan (Last-N today, RAG tomorrow).
 
-## Coding Standards & Warnings
+## Runtime Flow
 
-- Nullable reference types are enabled project‑wide
-- Treat warnings as errors is enabled; avoid introducing .NET 8 warnings
-- Prefer async/await end‑to‑end; avoid sync‑over‑async and `Thread.Sleep` in tests
-- Use platform guards for OS‑specific code
+1. `Program.cs` loads configuration, configures logging, and verifies the Whisper model exists (downloading if needed).
+2. Audio frames are captured via `Streamer` (`Elara.Audio`) and sent through a bounded channel.
+3. `Transcriber` (`Elara.Speech`) consumes frames, invokes Whisper, and emits `TranscriptionItem` instances.
+4. `ConversationStateMachine` (`Elara.Pipeline`) monitors wake-word detection and silence windows to raise `PromptReady`.
+5. `PromptHandlingService` (`Elara.Host`) persists the user turn, asks the configured `IContextProvider` for history, renders a structured JSON prompt, calls the Ollama-backed `ILanguageModelService`, stores the assistant turn, and optionally speaks the reply.
+6. TTS playback is wrapped in a suppression window so microphone input captured during speech is ignored.
 
-## Local LLM (Ollama)
+The structured prompt passed to Ollama looks like:
 
-- Ensure Ollama is running locally and the configured model is available
-- Configure via `LanguageModel` section in `appsettings.json`
+```json
+{
+  "prompt": {
+    "history": [
+      { "role": "user", "content": "...", "timestampUtc": "..." },
+      { "role": "assistant", "content": "...", "timestampUtc": "..." }
+    ],
+    "user": { "role": "user", "content": "current request", "timestampUtc": "..." },
+    "hints": { }
+  }
+}
+```
 
-## Logging
+The system prompt (from configuration plus built-in guidance) requests concise, TTS-friendly responses.
 
-- Controlled via the `ElaraLogging` section
-- Logs are written to the configured directory with a date‑tokenized filename pattern
-- Console timestamps are configurable
+## Testing and Tooling
 
-## Current Focus Areas
-
-- Stabilize modular boundaries while keeping Host lean (composition only)
-- Maintain cross‑platform readiness (particularly for TTS)
-- Improve async, cancellation, and streaming ergonomics
-- Keep configuration simple and strongly‑typed
-
-## Future Direction
-
-- Add basic context management system (last n conversations, etc).
-- Enhance context management system with RAG using local Embedding model via Ollama.
-- Cross‑platform TTS backends (e.g., cloud or local engines) with feature parity
-- Optional multi‑targeting for OS‑specific features
-- Enriched pipeline metrics and diagnostics
-- Expand test coverage per module; consolidate legacy `Elara.UnitTests` or rename to integration tests
-- Continuous cleanup of nullable annotations and platform guards
+- Run all unit tests: `dotnet test Elara.sln`.
+- Each module has a matching `*.UnitTests` project; prefer adding tests alongside changes.
+- Session recordings (`--record`) save WAV audio, transcription JSON, and tolerances under `SampleRuns/` for manual or automated playback.
+- Generated logs live under the directory specified by `ElaraLogging.Directory` (relative to the host binary by default).
 
 ## Contributing
 
-- Keep changes small, focused, and aligned with existing patterns (YAGNI)
-- Adhere to warnings‑as‑errors; fix analyzer warnings promptly
-- Prefer adding tests alongside changes in the corresponding `*.UnitTests` project
+- Keep changes scoped to the relevant project; each assembly treats nullable warnings as errors.
+- Respect platform guards when referencing Windows-only APIs (`System.Speech`).
+- Update `ContextManagement.md` if you evolve the context stack or prompt format.
+- Regenerate third-party notices (`build/Update-ThirdParty-Notices.cmd`) after adding dependencies.
 
 ## License
 
-See `LICENSE.md` in the repository root.
+See `LICENSE.md` for details.
