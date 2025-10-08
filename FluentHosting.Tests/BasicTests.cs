@@ -1,7 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Http;
-using System.Threading;
+using System.Net.Sockets;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -9,44 +9,66 @@ namespace FluentHosting.Tests
 {
     public class BasicTests
     {
-        public const string ApiUrl = "http://localhost";
-        public const int ApiPort = 1337;
-
-        public string BaseUrl => $"{ApiUrl}:{ApiPort}/";
+        private static string ApiUrl => "http://127.0.0.1";
 
         [Fact]
         public async Task ComposingAnApi_With_OneHandler_ReturningHelloWorld_ShouldReturn_HelloWorld()
         {
-            var host = new FluentHost(ApiUrl, ApiPort)
+            var port = GetAvailablePort();
+            var host = new FluentHost(ApiUrl, port)
                 .Handles("/", Verb.Get, context => new StringResponse("Hello World!"))
                 .Start();
 
-            using var client = new HttpClient();
-            var data = await client.GetStringAsync(BaseUrl);
-            Assert.Equal("Hello World!", data);
-            await Task.Delay(500);
-            data = await client.GetStringAsync(BaseUrl);
-            Assert.Equal("Hello World!", data);
-
-            host.Stop();
+            try
+            {
+                using var client = new HttpClient { BaseAddress = BuildBaseUri(port) };
+                var data = await client.GetStringAsync("/");
+                Assert.Equal("Hello World!", data);
+                await Task.Delay(200);
+                data = await client.GetStringAsync("/");
+                Assert.Equal("Hello World!", data);
+            }
+            finally
+            {
+                host.Stop();
+            }
         }
 
         [Fact]
         public async Task ComposingAnApi_With_OneHandler_AcceptingDelete_ShouldReturn_204_And_Empty_Body()
         {
             const string endpoint = "/items/1";
-            var host = new FluentHost(ApiUrl, ApiPort)
+            var port = GetAvailablePort();
+            var host = new FluentHost(ApiUrl, port)
                 .Handles(endpoint, Verb.Delete, context => new StringResponse(string.Empty, 204))
                 .Start();
 
-            using (var client = new HttpClient())
+            try
             {
-                var response = await client.DeleteAsync($"{BaseUrl}{endpoint}");
+                using var client = new HttpClient { BaseAddress = BuildBaseUri(port) };
+                var response = await client.DeleteAsync(endpoint);
                 Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
             }
-            host.Stop();
+            finally
+            {
+                host.Stop();
+            }
         }
 
+        private static Uri BuildBaseUri(int port) => new($"{ApiUrl}:{port}/");
 
+        private static int GetAvailablePort()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            try
+            {
+                listener.Start();
+                return ((IPEndPoint)listener.LocalEndpoint).Port;
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        }
     }
 }
