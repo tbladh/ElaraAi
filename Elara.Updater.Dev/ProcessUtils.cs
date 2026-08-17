@@ -66,10 +66,10 @@ namespace Elara.Updater.Dev
                 {
                     try
                     {
-                        while (!proc.StandardOutput.EndOfStream)
+                        string? line;
+                        while ((line = await proc.StandardOutput.ReadLineAsync()) != null)
                         {
-                            var line = await proc.StandardOutput.ReadLineAsync();
-                            if (line != null) log?.Invoke($"[HOST OUT] {line}");
+                            log?.Invoke($"[HOST OUT] {line}");
                         }
                     }
                     catch { }
@@ -78,10 +78,10 @@ namespace Elara.Updater.Dev
                 {
                     try
                     {
-                        while (!proc.StandardError.EndOfStream)
+                        string? line;
+                        while ((line = await proc.StandardError.ReadLineAsync()) != null)
                         {
-                            var line = await proc.StandardError.ReadLineAsync();
-                            if (line != null) log?.Invoke($"[HOST ERR] {line}");
+                            log?.Invoke($"[HOST ERR] {line}");
                         }
                     }
                     catch { }

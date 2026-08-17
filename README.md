@@ -1,6 +1,6 @@
 # Elara AI
 
-Elara is a modular, local-first voice assistant built on .NET 8. The host listens for a wake word, segments incoming audio, transcribes it with Whisper, calls a local language model (Ollama by default), optionally speaks the reply, and persists the conversation context on disk with optional encryption.
+Elara is a modular, local-first voice assistant built on .NET 10. The host listens for a wake word, segments incoming audio, transcribes it with Whisper, calls a local language model (Ollama by default), optionally speaks the reply, and persists the conversation context on disk with optional encryption.
 
 ## Highlights
 
@@ -31,7 +31,7 @@ Elara is a modular, local-first voice assistant built on .NET 8. The host listen
 
 ### Requirements
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Windows for `System.Speech` text-to-speech (other platforms transparently use the no-op TTS service)
 - Ollama running locally (default base URL `http://localhost:11434`) with the configured model pulled, for example `ollama pull cogito:8b`
 

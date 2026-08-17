@@ -1,12 +1,11 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (none) -> 1.0.0  [initial ratification]
-Modified principles: none (initial creation)
+Version change: 1.0.0 -> 1.1.0  [MINOR: new governance rule added]
+Modified principles: none
 Added sections:
-  - Core Principles (I-VI)
-  - Development Workflow
-  - Governance
+  - Governance: "Git Operations" rule (explicit permission required
+    before commit and push)
 Removed sections: none
 Deferred items: none
 -->
@@ -95,5 +94,9 @@ constitution, not by exception.
 - **Compliance**: Every specification, plan, and implementation MUST be
   checked against these principles before completion. Use
   `.github/copilot-instructions.md` for runtime development guidance.
+- **Git Operations**: An agent MUST obtain explicit user permission
+  before running `git commit`, and again before `git push`. Prior
+  approval does NOT carry over to subsequent commit or push actions;
+  each one requires its own confirmation.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-17 | **Last Amended**: 2026-08-17
+**Version**: 1.1.0 | **Ratified**: 2026-08-17 | **Last Amended**: 2026-08-17

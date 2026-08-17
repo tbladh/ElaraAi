@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Version>1.0.1</Version>
     <Description>A trivially simple and fluently composable web server for those times when you quickly need to get a no-frills server up and running. Ideal for development and testing.</Description>
     <Copyright>Copyright 2020 Thomas Bladh</Copyright>
