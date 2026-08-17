@@ -1,50 +1,99 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+==================
+Version change: (none) -> 1.0.0  [initial ratification]
+Modified principles: none (initial creation)
+Added sections:
+  - Core Principles (I-VI)
+  - Development Workflow
+  - Governance
+Removed sections: none
+Deferred items: none
+-->
+
+# Elara Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Modular Architecture
+Each capability lives in a small, focused project with a single
+responsibility (`Elara.Core`, `Elara.Audio`, `Elara.Speech`,
+`Elara.Intelligence`, `Elara.Pipeline`, `Elara.Context`,
+`Elara.Configuration`, `Elara.Logging`, `Elara.Host`). Projects MUST
+depend only on what they need, and the host (`Elara.Host`) is the sole
+composition root that wires services via dependency injection. New
+functionality MUST be placed in the project that owns that
+responsibility rather than added to the host.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Test-First (NON-NEGOTIABLE)
+Every project has a colocated `*.UnitTests` project. New behavior MUST
+ship with tests in the corresponding test project. Tests MUST be
+deterministic and fast: prefer in-memory stubs and fakes over real I/O,
+network, or model downloads. Timer- and silence-dependent logic MUST be
+tested against an injected `ITimeProvider` fake, never real wall-clock
+time.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Local-First
+Elara is a local-first assistant. The pipeline MUST run without external
+cloud services: speech-to-text uses a locally cached Whisper model, the
+language model is a local endpoint (Ollama by default), and conversation
+context is persisted on local disk. Any dependency on a remote service
+MUST be optional, explicitly configured, and degrade gracefully when
+unavailable.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Strongly-Typed Configuration
+Runtime configuration MUST be modeled as strongly-typed POCOs in
+`Elara.Configuration` and bound through the standard Microsoft
+configuration pipeline (`appsettings.json`, environment, override,
+command-line). Reading raw configuration strings ad hoc is prohibited.
+New settings MUST be added as typed members with sensible defaults.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Platform Portability
+The solution MUST compile on all supported platforms. Windows-only APIs
+(e.g. `System.Speech` text-to-speech) MUST be guarded at compile time
+(`[SupportedOSPlatform]`) and/or runtime (`OperatingSystem.IsWindows()`)
+and MUST have a cross-platform fallback (e.g. `NoOpTextToSpeechService`).
+A non-Windows build MUST succeed even when Windows-only code paths exist.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### VI. Simplicity
+Prefer the smallest design that satisfies the requirement (YAGNI).
+Orchestration MUST be event-driven and composed of small, single-purpose
+services rather than large inline handlers. Complexity MUST be justified
+in the accompanying specification or plan.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+## Development Workflow
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
-
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- Build: `dotnet build Elara.sln`
+- Test: `dotnet test Elara.sln`
+- Run: `dotnet run --project Elara.Host`
+- Projects enable nullable reference types and treat warnings as errors;
+  new code MUST introduce no new warnings or analyzers without explicit
+  justification.
+- Line endings are LF (see `.editorconfig` / `.gitattributes`); keep the
+  working tree renormalized.
+- Regenerate third-party notices
+  (`build/Update-ThirdParty-Notices.cmd`) after adding dependencies.
+- Update `ContextManagement.md` when the context stack or prompt format
+  changes.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all other development practices in this
+repository. Where a practice conflicts with a principle here, the
+principle wins and the conflict MUST be resolved by amending the
+constitution, not by exception.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- **Amendments**: Changes to this document MUST be proposed with a clear
+  rationale, applied to `.specify/memory/constitution.md`, and recorded
+  in a Sync Impact Report.
+- **Versioning**: The version follows semantic versioning.
+  - MAJOR: removal or redefinition of a principle (backward-incompatible
+    governance change).
+  - MINOR: addition of a new principle or section, or materially expanded
+    guidance.
+  - PATCH: clarifications, wording, or typo fixes with no semantic change.
+- **Compliance**: Every specification, plan, and implementation MUST be
+  checked against these principles before completion. Use
+  `.github/copilot-instructions.md` for runtime development guidance.
+
+**Version**: 1.0.0 | **Ratified**: 2026-08-17 | **Last Amended**: 2026-08-17
