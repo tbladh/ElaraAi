@@ -1,0 +1,20 @@
+* text=auto eol=lf
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+
+# Audio
+*.wav binary
+*.mp3 binary
+*.ogg binary
+
+# Archives
+*.zip binary
+*.7z binary
+*.tar binary
+*.gz binary
+*.tgz binary

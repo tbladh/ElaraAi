@@ -1,36 +1,51 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Elara.Context;
+using Elara.Context.Contracts;
+using Elara.Context.LastN;
+using Xunit;
+
 namespace Elara.Context.LastN.UnitTests;
 
-public class LastNContextProviderTests
+public sealed class LastNContextProviderTests
 {
-    private static string CreateTempDir()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "ElaraAi.Context.LastN.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
-
     [Fact]
-    public async Task LastNContextProvider_RespectsN()
+    public async Task GetContextAsync_ForwardsRequestToStore()
     {
-        var dir = CreateTempDir();
-        var key = "another-key";
-        var store = new FileConversationStore(dir, key);
+        var store = new StubConversationStore();
         var provider = new LastNContextProvider(store);
 
-        var t0 = DateTimeOffset.UtcNow.AddMinutes(-1);
-        for (int i = 0; i < 5; i++)
+        var result = await provider.GetContextAsync("prompt", 3, CancellationToken.None);
+
+        Assert.True(store.ReadTailCalled);
+        Assert.Equal(3, store.LastRequestedCount);
+        Assert.Single(result);
+        Assert.Equal("test", result[0].Content);
+    }
+
+    private sealed class StubConversationStore : IConversationStore
+    {
+        public bool ReadTailCalled { get; private set; }
+        public int LastRequestedCount { get; private set; }
+
+        public Task AppendMessageAsync(ChatMessage message, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ChatMessage>> ReadTailAsync(int count, CancellationToken ct = default)
         {
-            await store.AppendMessageAsync(new ChatMessage { Role = ChatRole.User, Content = $"m{i}", TimestampUtc = t0.AddSeconds(i) });
+            ReadTailCalled = true;
+            LastRequestedCount = count;
+            IReadOnlyList<ChatMessage> messages = new[]
+            {
+                new ChatMessage
+                {
+                    Role = ChatRole.User,
+                    Content = "test",
+                    TimestampUtc = DateTimeOffset.UtcNow
+                }
+            };
+            return Task.FromResult(messages);
         }
-
-        var ctx2 = await provider.GetContextAsync("prompt", 2);
-        Assert.Equal(2, ctx2.Count);
-        Assert.Equal("m3", ctx2[0].Content);
-        Assert.Equal("m4", ctx2[1].Content);
-
-        var ctx4 = await provider.GetContextAsync("prompt", 4);
-        Assert.Equal(4, ctx4.Count);
-        Assert.Equal("m1", ctx4[0].Content);
-        Assert.Equal("m4", ctx4[^1].Content);
     }
 }

@@ -18,6 +18,25 @@ out/
 *.rsuser
 *.suo
 *.user
+*.jfm
+
+# Rider / JetBrains
+.idea/
+
+# Build outputs
+package-lock.json
+node_modules/
+artifacts/
+TestResults/
+SampleRuns/
+*.nupkg
+*.coverage
+*.coveragexml
+*.trx
+
+# Logs
+*.log
+Logs/
 *.userosscache
 *.sln.docstates
 *.userprefs

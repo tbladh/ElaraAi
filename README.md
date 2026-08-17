@@ -23,7 +23,6 @@ Elara is a modular, local-first voice assistant built on .NET 8. The host listen
 - `Elara.Logging/` - lightweight logging abstractions, file logging, and console colorizer.
 - `FluentHosting/` - helper abstractions for lightweight hosting scenarios.
 - `Elara.Logging`, `Elara.Audio`, `Elara.Speech`, `Elara.Intelligence`, `Elara.Pipeline`, `Elara.Context`, and peers each have corresponding `*.UnitTests/` projects.
-- `Elara.UnitTests/` - legacy aggregate tests kept for backward compatibility.
 - `Elara.Updater.Dev/` - developer tooling for the (future) updater.
 - `build/` - scripts for generating and updating third-party notices.
 - `ContextManagement.md` - design notes for the context system (current Last-N plus RAG roadmap).
@@ -139,6 +138,8 @@ The system prompt (from configuration plus built-in guidance) requests concise, 
 - Respect platform guards when referencing Windows-only APIs (`System.Speech`).
 - Update `ContextManagement.md` if you evolve the context stack or prompt format.
 - Regenerate third-party notices (`build/Update-ThirdParty-Notices.cmd`) after adding dependencies.
+- Follow the repository `.editorconfig` and keep line endings as LF; if you see noisy diffs run `git add --renormalize .`.
+- Run `dotnet test Elara.sln` (or the targeted project test suite) before opening a pull request to catch regressions early.
 
 ## License
 

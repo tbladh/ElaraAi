@@ -5,7 +5,7 @@ using Elara.Core.Interfaces;
 namespace Elara.Speech
 {
     /// <summary>
-    /// Minimal Whisper.net–backed speech-to-text (STT) implementation used by the host application.
+    /// Minimal Whisper.net–backed speech-to-text (STT) implementation used by the host.
     /// This service lazily initializes a <see cref="WhisperFactory"/> from a local model file and
     /// exposes simple transcription APIs for full streams, files, and chunked streaming.
     /// </summary>
